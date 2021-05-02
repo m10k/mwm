@@ -208,8 +208,12 @@ int array_get(struct array *array, int idx, void **data)
 	}
 
 	real_idx = idx % array->size;
-	*data = array->data[real_idx];
 
+	if(!array->flags[real_idx]) {
+		return(-ENOENT);
+	}
+
+	*data = array->data[real_idx];
 	return(0);
 }
 
