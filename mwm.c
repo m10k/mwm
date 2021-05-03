@@ -5,8 +5,10 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/Xinerama.h>
 #include "mwm.h"
+#include "workspace.h"
 #include "monitor.h"
 #include "array.h"
+#include "loop.h"
 #include "x.h"
 #include "common.h"
 
@@ -19,7 +21,8 @@ struct mwm {
 	struct geom root_geom;
 
 	int running;
-	struct array *monitors;
+	struct loop *monitors;
+	struct loop *workspaces;
 
 	_mwm_xhandler_t *xhandler[LASTEvent];
 	mwm_handler_t *handler[MWM_EVENT_LAST];
@@ -38,6 +41,11 @@ static void _mwm_client_message(struct mwm *mwm, XEvent *event)
 static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 {
 	return;
+}
+
+static int _cmp_monitor_id(struct monitor *mon, int *id)
+{
+	return(monitor_get_id(mon) == *id);
 }
 
 static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
@@ -69,9 +77,8 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 		       screen_info[i].x_org, screen_info[i].y_org,
 		       screen_info[i].width, screen_info[i].height);
 
-		if(array_get(mwm->monitors, screen_info[i].screen_number, (void**)&mon) < 0) {
-			printf("New monitor\n");
-
+		if(loop_find(&mwm->monitors, (int(*)(void*,void*))_cmp_monitor_id,
+			     &screen_info[i].screen_number, (void**)&mon) < 0) {
 			if(monitor_new(screen_info[i].screen_number,
 				       screen_info[i].x_org, screen_info[i].y_org,
 				       screen_info[i].width, screen_info[i].height,
@@ -90,8 +97,10 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 
 			printf("Old monitor\n");
 
-			if(monitor_set_geometry(mon, screen_info[i].x_org, screen_info[i].y_org,
-						screen_info[i].width, screen_info[i].height) < 0) {
+			if(monitor_set_geometry(mon, screen_info[i].x_org,
+						screen_info[i].y_org,
+						screen_info[i].width,
+						screen_info[i].height) < 0) {
 				/* TODO: Let the user know */
 			}
 		}
@@ -172,6 +181,10 @@ static void _mwm_notify(struct mwm *mwm, mwm_event_t event, void *data)
 int mwm_new(struct mwm **dst)
 {
 	struct mwm *mwm;
+	int err;
+	int i;
+
+	err = 0;
 
 	if(!dst) {
 		return(-EINVAL);
@@ -185,9 +198,14 @@ int mwm_new(struct mwm **dst)
 
 	memset(mwm, 0, sizeof(*mwm));
 
-	if(array_new(&(mwm->monitors)) < 0) {
-		free(mwm);
-		return(-ENOMEM);
+	for(i = 0; i < 12; i++) {
+		struct workspace *workspace;
+
+		if(workspace_new(i, &workspace) < 0 ||
+		   loop_append(&mwm->workspaces, workspace) < 0) {
+			err = -ENOMEM;
+			goto cleanup;
+		}
 	}
 
 	mwm->xhandler[ButtonPress]      = _mwm_button_press;
@@ -205,9 +223,14 @@ int mwm_new(struct mwm **dst)
 	mwm->xhandler[PropertyNotify]   = _mwm_property_notify;
 	mwm->xhandler[UnmapNotify]      = _mwm_unmap_notify;
 
-	*dst = mwm;
+cleanup:
+	if(err < 0) {
+		mwm_free(&mwm);
+	} else {
+		*dst = mwm;
+	}
 
-	return(0);
+	return(err);
 }
 
 int mwm_free(struct mwm **mwm)
@@ -219,6 +242,9 @@ int mwm_free(struct mwm **mwm)
 	if(!*mwm) {
 		return(-EALREADY);
 	}
+
+	loop_free(&(*mwm)->workspaces);
+	loop_free(&(*mwm)->monitors);
 
 	if((*mwm)->display) {
 		XCloseDisplay((*mwm)->display);
@@ -301,7 +327,7 @@ int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon)
 
 	idx = monitor_get_id(mon);
 
-	if(array_set(mwm->monitors, idx, mon) < 0) {
+	if(loop_append(&mwm->monitors, mon) < 0) {
 		return(-ENOMEM);
 	}
 
@@ -314,15 +340,11 @@ int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon)
 
 int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon)
 {
-	int idx;
-
 	if(!mwm || !mon) {
 		return(-EINVAL);
 	}
 
-	idx = monitor_get_id(mon);
-
-	if(array_take(mwm->monitors, idx, NULL) < 0) {
+	if(loop_remove(&mwm->monitors, mon) < 0) {
 		return(-ENODEV);
 	}
 

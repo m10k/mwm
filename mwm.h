@@ -5,6 +5,7 @@
 
 struct mwm;
 struct monitor;
+struct client;
 
 typedef enum {
 	MWM_EVENT_MONITOR_ATTACHED = 0,
@@ -23,5 +24,8 @@ int mwm_stop(struct mwm *mwm);
 
 int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon);
 int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon);
+
+int mwm_attach_client(struct mwm *mwm, struct client *client);
+int mwm_detach_client(struct mwm *mwm, struct client *client);
 
 #endif /* MWM_H */
