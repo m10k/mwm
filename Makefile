@@ -1,5 +1,5 @@
 OUTPUT = mwm
-OBJECTS = main.o array.o monitor.o mwm.o
+OBJECTS = main.o array.o x.o monitor.o mwm.o
 
 ifeq ($(PREFIX), )
 	PREFIX = /usr/local
@@ -9,7 +9,7 @@ ifeq ($(MANPREFIX), )
 endif
 
 CFLAGS = -std=c99 -pedantic -Wall -Wextra
-LDFLAGS =
+LDFLAGS = -lX11 -lXinerama
 
 PHONY = all clean install uninstall
 
@@ -31,7 +31,7 @@ uninstall:
 	rm -f $(DESTDIR)$(MANPREFIX)/man1/mwm.1
 
 mwm: $(OBJECTS)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -rf $(OBJECTS)
