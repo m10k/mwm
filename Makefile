@@ -1,5 +1,5 @@
 OUTPUT = mwm
-OBJECTS = main.o array.o x.o monitor.o mwm.o
+OBJECTS = main.o array.o x.o monitor.o mwm.o workspace.o loop.o client.o
 
 ifeq ($(PREFIX), )
 	PREFIX = /usr/local
