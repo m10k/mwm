@@ -154,7 +154,29 @@ int loop_find(struct loop **loop, int (*cmp)(void*, void*),
 	return(err);
 }
 
-int loop_foreach(struct loop **loop, int(*func)(void*, void*),
+int loop_foreach(struct loop **loop, void(*func)(void*))
+{
+	struct loop *cur;
+
+	if(!loop) {
+		return(-EINVAL);
+	}
+
+	if(!*loop) {
+		return(0);
+	}
+
+	cur = *loop;
+
+	do {
+		func(cur->data);
+		cur = cur->next;
+	} while(cur != *loop);
+
+	return(0);
+}
+
+int loop_foreach_with_data(struct loop **loop, int(*func)(void*, void*),
 		 void *data)
 {
 	struct loop *cur;
@@ -163,19 +185,19 @@ int loop_foreach(struct loop **loop, int(*func)(void*, void*),
 		return(-EINVAL);
 	}
 
+	if(!*loop) {
+		return(0);
+	}
+
 	cur = *loop;
 
-	while(cur) {
+	do {
 		if(func(cur->data, data) < 0) {
 			break;
 		}
 
 		cur = cur->next;
-
-		if(cur == *loop) {
-			break;
-		}
-	}
+	} while(cur != *loop);
 
 	return(0);
 }
@@ -275,4 +297,98 @@ int loop_get_length(struct loop **loop)
 	} while(cur != *loop);
 
 	return(length);
+}
+
+int loop_get_next(struct loop **loop, void *data, void **next)
+{
+	struct loop *iter;
+
+	if(!loop || !data || !next) {
+		return(-EINVAL);
+	}
+
+	if(__loop_find(loop, NULL, data, &iter) < 0) {
+		return(-ENOENT);
+	}
+
+	*next = iter->next->data;
+	return(0);
+}
+
+int loop_get_prev(struct loop **loop, void *data, void **prev)
+{
+	struct loop *iter;
+
+	if(!loop || !data || !prev) {
+		return(-EINVAL);
+	}
+
+	if(__loop_find(loop, NULL, data, &iter) < 0) {
+		return(-ENOENT);
+	}
+
+	*prev = iter->prev->data;
+	return(0);
+}
+
+int loop_shift_forwards(struct loop **loop, void *data)
+{
+	struct loop *iter;
+	struct loop *next;
+
+	if(!loop || !data) {
+		return(-EINVAL);
+	}
+
+	if(__loop_find(loop, NULL, data, &iter) < 0) {
+		return(-ENOENT);
+	}
+
+	next = iter->next;
+
+	iter->prev->next = next;
+	next->prev = iter->prev;
+	next->next->prev = iter;
+	iter->next = next->next;
+	iter->prev = next;
+	next->next = iter;
+
+	if(*loop == iter) {
+		*loop = iter->prev;
+	} else if(*loop == iter->prev) {
+		*loop = iter;
+	}
+
+	return(0);
+}
+
+int loop_shift_backwards(struct loop **loop, void *data)
+{
+	struct loop *iter;
+	struct loop *next;
+
+	if(!loop || !data) {
+		return(-EINVAL);
+	}
+
+	if(__loop_find(loop, NULL, data, &next) < 0) {
+		return(-ENOENT);
+	}
+
+	iter = next->prev;
+
+	iter->prev->next = next;
+	next->prev = iter->prev;
+	next->next->prev = iter;
+	iter->next = next->next;
+	iter->prev = next;
+	next->next = iter;
+
+	if(*loop == next) {
+		*loop = next->next;
+	} else if(*loop == next->next) {
+		*loop = next;
+	}
+
+	return(0);
 }
