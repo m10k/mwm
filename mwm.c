@@ -24,6 +24,7 @@
 #include "common.h"
 #include "client.h"
 #include "theme.h"
+#include "kbptr.h"
 
 typedef void (_mwm_xhandler_t)(struct mwm*, XEvent*);
 
@@ -850,6 +851,36 @@ static void _cmd_quit(struct mwm *mwm, void *arg)
 	return;
 }
 
+static void _cmd_kbptr_move(struct mwm *mwm, void *arg)
+{
+	struct client *client;
+	long dir;
+
+	dir = (long)arg;
+	client = mwm_get_focused_client(mwm);
+
+	if(client) {
+		kbptr_move(mwm, client, dir);
+	}
+
+	return;
+}
+
+static void _cmd_kbptr_click(struct mwm *mwm, void *arg)
+{
+	struct client *client;
+	long button;
+
+	button = (long)arg;
+	client = mwm_get_focused_client(mwm);
+
+	if(client) {
+		kbptr_click(mwm, client, button);
+	}
+
+	return;
+}
+
 static int _xerror_startup(Display *display, XErrorEvent *event)
 {
 	fprintf(stderr, "Looks like I'm not your only window manager\n");
@@ -972,6 +1003,8 @@ int mwm_init(struct mwm *mwm)
 	mwm->commands[MWM_CMD_SHIFT_CLIENT] = _cmd_shift_client;
 	mwm->commands[MWM_CMD_SHIFT_MONITOR_FOCUS] = _cmd_shift_monitor_focus;
 	mwm->commands[MWM_CMD_SHIFT_WORKSPACE] = _cmd_shift_workspace;
+	mwm->commands[MWM_CMD_KBPTR_MOVE] = _cmd_kbptr_move;
+	mwm->commands[MWM_CMD_KBPTR_CLICK] = _cmd_kbptr_click;
 
 	return(0);
 }

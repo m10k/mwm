@@ -2,6 +2,7 @@
 #include "theme.h"
 #include "keys.h"
 #include "mwm.h"
+#include "kbptr.h"
 
 #define MODKEY Mod4Mask
 
@@ -85,6 +86,19 @@ struct key_binding config_keybindings[] = {
 	{ MODKEY | ShiftMask,   XK_q,           MWM_CMD_SHIFT_WORKSPACE,     (void*)-1 },
 	{ MODKEY,               XK_e,           MWM_CMD_SHIFT_MONITOR_FOCUS, (void*)+1 },
 	{ MODKEY | ShiftMask,   XK_e,           MWM_CMD_SHIFT_WORKSPACE,     (void*)+1 },
+
+	{ MODKEY,               XK_u,           MWM_CMD_KBPTR_MOVE,          (void*)KBPTR_CENTER },
+	{ MODKEY,               XK_i,           MWM_CMD_KBPTR_MOVE,          (void*)KBPTR_NORTH },
+	{ MODKEY,               XK_l,           MWM_CMD_KBPTR_MOVE,          (void*)KBPTR_EAST },
+	{ MODKEY,               XK_k,           MWM_CMD_KBPTR_MOVE,          (void*)KBPTR_SOUTH },
+	{ MODKEY,               XK_j,           MWM_CMD_KBPTR_MOVE,          (void*)KBPTR_WEST },
+	{ MODKEY | ShiftMask,   XK_i,           MWM_CMD_KBPTR_MOVE,          (void*)(KBPTR_NORTH | KBPTR_HALFSTEP) },
+	{ MODKEY | ShiftMask,   XK_l,           MWM_CMD_KBPTR_MOVE,          (void*)(KBPTR_EAST  | KBPTR_HALFSTEP) },
+	{ MODKEY | ShiftMask,   XK_k,           MWM_CMD_KBPTR_MOVE,          (void*)(KBPTR_SOUTH | KBPTR_HALFSTEP) },
+	{ MODKEY | ShiftMask,   XK_j,           MWM_CMD_KBPTR_MOVE,          (void*)(KBPTR_WEST  | KBPTR_HALFSTEP) },
+	{ MODKEY,               XK_semicolon,   MWM_CMD_KBPTR_CLICK,         (void*)KBPTR_LEFT },
+	{ MODKEY | ShiftMask,   XK_semicolon,   MWM_CMD_KBPTR_CLICK,         (void*)KBPTR_RIGHT },
+	{ MODKEY | ControlMask, XK_semicolon,   MWM_CMD_KBPTR_CLICK,         (void*)KBPTR_MIDDLE },
 
 	{ 0,                    0,              MWM_CMD_MAX,                 0 }
 };
