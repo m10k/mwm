@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -5,13 +6,20 @@
 #include "common.h"
 #include "client.h"
 #include "workspace.h"
+#include "mwm.h"
+#include "monitor.h"
 
 struct client {
-	struct geom geom;
 	Window window;
+	struct geom geom;
+	int needs_redraw;
+
+	int border_width;
 	client_flags_t flags;
 	struct workspace *workspace;
 };
+
+extern struct mwm *__mwm;
 
 int client_new(Window window, XWindowAttributes *attrs, struct client **client)
 {
@@ -74,4 +82,210 @@ int client_get_geometry(struct client *client, struct geom *geom)
 
 	memcpy(geom, &client->geom, sizeof(*geom));
 	return(0);
+}
+
+Window client_get_window(struct client *client)
+{
+	return(client->window);
+}
+
+int client_configure(struct client *client)
+{
+	XConfigureEvent configure_event;
+	Display *display;
+	Window window;
+
+	display = mwm_get_display(__mwm);
+	window = client->window;
+
+	configure_event.type = ConfigureNotify;
+	configure_event.display = display;
+	configure_event.event = window;
+	configure_event.window = window;
+	configure_event.x = client->geom.x;
+	configure_event.y = client->geom.y;
+	configure_event.width = client->geom.w;
+	configure_event.height = client->geom.h;
+	configure_event.border_width = client->border_width;
+	configure_event.above = None;
+	configure_event.override_redirect = False;
+
+	if(!XSendEvent(display, window, False, StructureNotifyMask,
+		       (XEvent*)&configure_event)) {
+		return(-EIO);
+	}
+
+	return(0);
+}
+
+int client_redraw(struct client *client)
+{
+	if(!client) {
+		return(-EINVAL);
+	}
+
+	if(client_is_visible(client)) {
+		XMapRaised(mwm_get_display(__mwm), client->window);
+		XMoveWindow(mwm_get_display(__mwm), client->window,
+			    client->geom.x, client->geom.y);
+	} else {
+		XMoveWindow(mwm_get_display(__mwm), client->window,
+			    client->geom.w * -2, client->geom.y);
+	}
+
+	client->needs_redraw = 0;
+
+	return(0);
+}
+
+int client_get_border(struct client *client)
+{
+	return(client->border_width);
+}
+
+void client_set_border(struct client *client, int border)
+{
+	client->border_width = border;
+	return;
+}
+
+struct monitor* client_get_viewer(struct client *client)
+{
+	if(client->workspace) {
+		return(workspace_get_viewer(client->workspace));
+	}
+
+	return(NULL);
+}
+
+int client_is_floating(struct client *client)
+{
+	struct monitor *viewer;
+
+	if(!client) {
+		return(FALSE);
+	}
+
+	if(client->flags & CLIENT_FLOATING) {
+		return(TRUE);
+	}
+
+	viewer = client_get_viewer(client);
+
+	return(viewer ? monitor_is_floating(viewer) : FALSE);
+}
+
+int client_set_workspace(struct client *client, struct workspace *workspace)
+{
+	if(!client || !workspace) {
+		return(-EINVAL);
+	}
+
+	client->workspace = workspace;
+	return(0);
+}
+
+struct workspace* client_get_workspace(struct client *client)
+{
+	return(client->workspace);
+}
+
+int client_is_visible(struct client *client)
+{
+	struct workspace *workspace;
+
+	workspace = client_get_workspace(client);
+
+	if(!workspace) {
+		return(FALSE);
+	}
+
+	return(workspace_get_viewer(workspace) != NULL);
+}
+
+int client_is_tiled(struct client *client)
+{
+	if(!client) {
+		return(FALSE);
+	}
+
+	if(client->flags & (CLIENT_FLOATING |
+			    CLIENT_FULLSCREEN |
+			    CLIENT_FIXED)) {
+		return(FALSE);
+	}
+
+	return(TRUE);
+}
+
+int client_change_geometry(struct client *client, struct geom *geom)
+{
+	if(!client || !geom) {
+		return(-EINVAL);
+	}
+
+	/* If the client is floating, we'll allow it */
+	if(client_is_floating(client)) {
+		client_set_geometry(client, geom);
+	}
+
+	return(0);
+}
+
+int client_show(struct client *client)
+{
+#if MWM_DEBUG
+	printf("XMoveResizeWindow(%p, %ld, %d, %d, %d, %d)\n",
+	       (void*)client, client->window,
+	       client->geom.x, client->geom.y,
+	       client->geom.w, client->geom.h);
+#endif /* MWM_DEBUG */
+
+	XMoveResizeWindow(mwm_get_display(__mwm), client->window,
+			  client->geom.x, client->geom.y,
+			  client->geom.w, client->geom.h);
+	XMapRaised(mwm_get_display(__mwm), client->window);
+
+	return(0);
+}
+
+int client_needs_redraw(struct client *client)
+{
+	if(!client) {
+		return(-EINVAL);
+	}
+
+	client->needs_redraw = 1;
+	workspace_needs_redraw(client->workspace);
+
+	return(0);
+}
+
+int client_focus(struct client *client)
+{
+	if(!client) {
+		return(-EINVAL);
+	}
+
+	XSetInputFocus(mwm_get_display(__mwm), client->window, RevertToPointerRoot, CurrentTime);
+
+	return(0);
+}
+
+int client_set_state(struct client *client, const long state)
+{
+	long wm_state;
+        long data[2];
+
+	data[0] = state;
+	data[1] = None;
+
+	if(mwm_get_atom(__mwm, "WM_STATE", &wm_state) < 0) {
+		return(-EIO);
+	}
+
+        XChangeProperty(mwm_get_display(__mwm), client->window,
+			wm_state, wm_state, 32,
+			PropModeReplace, (unsigned char*)data, 2);
+        return(0);
 }
