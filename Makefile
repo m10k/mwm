@@ -1,5 +1,5 @@
 OUTPUT = mwm
-OBJECTS = main.o x.o monitor.o mwm.o workspace.o loop.o client.o
+OBJECTS = main.o x.o monitor.o mwm.o workspace.o loop.o client.o common.o layout.o config.o
 
 ifeq ($(PREFIX), )
 	PREFIX = /usr/local
@@ -8,8 +8,9 @@ ifeq ($(MANPREFIX), )
 	MANPREFIX = $(PREFIX)/share/man
 endif
 
-CFLAGS = -std=c99 -pedantic -Wall -Wextra
-LDFLAGS = -lX11 -lXinerama
+PKG_CONFIG_LIBS = xft pango pangoxft
+CFLAGS = -std=c99 -pedantic -Wall $(shell pkg-config --cflags $(PKG_CONFIG_LIBS))
+LDFLAGS = -lX11 -lXinerama $(shell pkg-config --libs $(PKG_CONFIG_LIBS))
 
 PHONY = all clean install uninstall
 
