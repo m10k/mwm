@@ -301,7 +301,9 @@ static void _mwm_destroy_notify(struct mwm *mwm, XDestroyWindowEvent *event)
 	struct client *client;
 
 	/* get the client and detach it */
+#if MWM_DEBUG
 	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) < 0) {
@@ -507,7 +509,9 @@ static void _mwm_unmap_notify(struct mwm *mwm, XUnmapEvent *event)
 {
 	struct client *client;
 
+#if MWM_DEBUG
 	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
         if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
                            &event->window, &client) < 0) {
@@ -515,6 +519,7 @@ static void _mwm_unmap_notify(struct mwm *mwm, XUnmapEvent *event)
 	}
 
 	XGrabServer(mwm->display);
+	XSync(mwm->display, False);
 	XSetErrorHandler(_xerror_nop);
 
 	client_set_state(client, WithdrawnState);
@@ -1039,13 +1044,25 @@ int mwm_run(struct mwm *mwm)
 	XSync(mwm->display, False);
 	mwm->running = 1;
 
-	while(mwm->running && !XNextEvent(mwm->display, &event)) {
+	while(mwm->running) {
 		struct client *focused_client;
 
-		if(mwm->xhandler[event.type]) {
-			/* printf("XEvent: %x\n", event.type); */
-			mwm->xhandler[event.type](mwm, &event);
-		}
+		/*
+		 * Handle as many events as possible before redrawing. This is necessary
+		 * to avoid problems where an application unmaps/destroys multiple windows
+		 * in one go. If we process the events one-by-one, redrawing after each
+		 * event, we will likely attempt to redraw a window that was already
+		 * unmapped or destroyed, we just haven't noticed it yet because the event
+		 * is still in the queue.
+		 */
+
+		do {
+			if(XNextEvent(mwm->display, &event) == 0) {
+				if(mwm->xhandler[event.type]) {
+					mwm->xhandler[event.type](mwm, &event);
+				}
+			}
+		} while(XEventsQueued(mwm->display, QueuedAfterFlush) > 0);
 
 		if(mwm->needs_redraw) {
 			mwm_redraw(mwm);
