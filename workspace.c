@@ -89,6 +89,7 @@ int workspace_attach_client(struct workspace *workspace, struct client *client)
 
 int workspace_detach_client(struct workspace *workspace, struct client *client)
 {
+	struct client *next;
 	int err;
 
 #if MWM_DEBUG
@@ -99,20 +100,42 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 		return(-EINVAL);
 	}
 
+	/* before removing the client, we need to figure out who's getting the focus */
+	err = loop_get_next(&workspace->clients, client, (void**)&next);
+
+	if(err < 0) {
+		/*
+		 * At the *very least* we should have gotten a pointer to client itself.
+		 * If we didn't even get that, client wasn't on this workspace and we've
+		 * encountered a bug.
+		 */
+		fprintf(stderr, "%s: BUG: Could not determine next client\n", __func__);
+		fprintf(stderr, "%s: loop_get_next: %s\n", __func__, strerror(-err));
+
+		return(err);
+	}
+
 	err = loop_remove(&workspace->clients, client);
 
 	if(err < 0) {
+		/*
+		 * If client wasn't on this workspace, the branch above should have been
+		 * visited. So if we get here, something even nastier is going on.
+		 */
+		fprintf(stderr, "%s: BUG: Client %p was not on this workspace.\n",
+			__func__, (void*)client);
+		fprintf(stderr, "%s: loop_remove: %s\n", __func__, strerror(-err));
+
 		return(err);
 	}
 
 	if(workspace_get_focused_client(workspace) == client) {
-		struct client *first;
-
-		if(loop_get_first(&workspace->clients, (void**)&first) < 0) {
-			first = NULL;
+		if(next == client) {
+			/* nothing left to focus on */
+			next = NULL;
 		}
 
-		workspace_focus_client(workspace, first);
+		workspace_focus_client(workspace, next);
 	}
 
 	workspace_needs_redraw(workspace);
