@@ -530,9 +530,14 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 	XSetForeground(display, monitor->gfx_context,
 		       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_FOCUSED));
-	XFillRectangle(display, monitor->statusbar,
+	XDrawRectangle(display, monitor->statusbar,
 		       monitor->gfx_context, status_x, 0,
-		       status_width, STATUSBAR_HEIGHT);
+		       status_width, STATUSBAR_HEIGHT - 1);
+	XSetForeground(display, monitor->gfx_context,
+		       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_BACKGROUND));
+	XFillRectangle(display, monitor->statusbar,
+		       monitor->gfx_context, status_x + 1, 0,
+		       status_width - 1, STATUSBAR_HEIGHT - 1);
 	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status,
 			status_x + dwdata.text_padding, dwdata.text_padding);
 
