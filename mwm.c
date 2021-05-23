@@ -934,6 +934,72 @@ static int _xerror_handle(Display *display, XErrorEvent *event)
 	return(__mwm->xerror_default_handler(display, event));
 }
 
+static void _find_existing_clients(struct mwm *mwm)
+{
+        Window dontcare;
+        Window *windows;
+        Window *cur;
+        unsigned int num_windows;
+
+        if(!XQueryTree(mwm->display, mwm->root, &dontcare, &dontcare, &windows, &num_windows)) {
+                return;
+        }
+
+        for(cur = windows; cur < windows + num_windows; cur++) {
+                XWindowAttributes attrs;
+
+                if(!XGetWindowAttributes(mwm->display, *cur, &attrs)) {
+                        continue;
+                }
+
+                if(attrs.override_redirect || XGetTransientForHint(mwm->display, *cur, &dontcare)) {
+                        continue;
+                }
+
+                if(attrs.map_state == IsViewable /* || IconicState */ ) {
+                        struct client *client;
+                        int err;
+
+                        if((err = client_new(*cur, &attrs, &client)) < 0) {
+                                fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
+                        } else if((err = mwm_attach_client(mwm, client)) < 0) {
+                                fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
+                                client_free(&client);
+                        }
+                }
+        }
+
+        for(cur = windows; cur < windows + num_windows; cur++) {
+                XWindowAttributes attrs;
+
+                if(!XGetWindowAttributes(mwm->display, *cur, &attrs)) {
+                        continue;
+                }
+
+                if(!XGetTransientForHint(mwm->display, *cur, &dontcare)) {
+                        continue;
+                }
+
+                if(attrs.map_state == IsViewable /* || IconicState */ ) {
+                        struct client *client;
+                        int err;
+
+                        if((err = client_new(*cur, &attrs, &client)) < 0) {
+                                fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
+                        } else if((err = mwm_attach_client(mwm, client)) < 0) {
+                                fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
+                                client_free(&client);
+                        }
+                }
+        }
+
+        if(windows) {
+                XFree(windows);
+        }
+
+        return;
+}
+
 int mwm_init(struct mwm *mwm)
 {
 	extern struct theme config_theme;
@@ -1010,6 +1076,8 @@ int mwm_init(struct mwm *mwm)
 	mwm->commands[MWM_CMD_SHIFT_WORKSPACE] = _cmd_shift_workspace;
 	mwm->commands[MWM_CMD_KBPTR_MOVE] = _cmd_kbptr_move;
 	mwm->commands[MWM_CMD_KBPTR_CLICK] = _cmd_kbptr_click;
+
+	_find_existing_clients(mwm);
 
 	return(0);
 }
