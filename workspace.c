@@ -228,22 +228,24 @@ int workspace_redraw(struct workspace *workspace)
 		return(-EINVAL);
 	}
 
-	first = loop_get_iter(&workspace->clients);
+	if(workspace->needs_redraw) {
+		first = loop_get_iter(&workspace->clients);
 
-	if(first) {
-		cur = first;
+		if(first) {
+			cur = first;
 
-		do {
-			struct client *client;
+			do {
+				struct client *client;
 
-			client = (struct client*)loop_iter_get_data(cur);
-			client_redraw(client);
+				client = (struct client*)loop_iter_get_data(cur);
+				client_redraw(client);
 
-			cur = loop_iter_get_next(cur);
-		} while(cur != first);
+				cur = loop_iter_get_next(cur);
+			} while(cur != first);
+		}
+
+		workspace->needs_redraw = 0;
 	}
-
-	workspace->needs_redraw = 0;
 
 	return(0);
 }
