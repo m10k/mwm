@@ -924,29 +924,33 @@ static int _xerror_nop(Display *display, XErrorEvent *event)
 
 static int _can_ignore_error(XErrorEvent *event)
 {
-        static struct {
-                unsigned char error_code;
-                unsigned char request_code;
-        } ignore_ok[] = {
-                { BadMatch, X_SetInputFocus },
-                { BadDrawable, X_PolyText8 },
-                { BadDrawable, X_PolyFillRectangle },
-                { BadDrawable, X_PolySegment },
-                { BadMatch, X_ConfigureWindow },
-                { BadAccess, X_GrabButton },
-                { BadAccess, X_GrabKey },
-                { BadDrawable, X_CopyArea }
-        };
-        int i;
+	static struct {
+		unsigned char error_code;
+		unsigned char request_code;
+	} ignore_ok[] = {
+		{ BadMatch, X_SetInputFocus },
+		{ BadDrawable, X_PolyText8 },
+		{ BadDrawable, X_PolyFillRectangle },
+		{ BadDrawable, X_PolySegment },
+		{ BadMatch, X_ConfigureWindow },
+		{ BadAccess, X_GrabButton },
+		{ BadAccess, X_GrabKey },
+		{ BadDrawable, X_CopyArea }
+	};
+	int i;
 
-        for(i = 0; i < (sizeof(ignore_ok) / sizeof(ignore_ok[0])); i++) {
-                if(event->request_code == ignore_ok[i].request_code &&
-                   event->error_code == ignore_ok[i].error_code) {
-                        return(1);
-                }
-        }
+	if(event->error_code == BadWindow) {
+		return(1);
+	}
 
-        return(0);
+	for(i = 0; i < (sizeof(ignore_ok) / sizeof(ignore_ok[0])); i++) {
+		if(event->request_code == ignore_ok[i].request_code &&
+		   event->error_code == ignore_ok[i].error_code) {
+			return(1);
+		}
+	}
+
+	return(0);
 }
 
 static int _xerror_handle(Display *display, XErrorEvent *event)
