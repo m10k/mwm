@@ -71,6 +71,10 @@ int client_set_geometry(struct client *client, struct geom *geom)
 
 	memcpy(&client->geom, geom, sizeof(*geom));
 
+	if(client_is_visible(client)) {
+		client_needs_redraw(client);
+	}
+
 	return(0);
 }
 
