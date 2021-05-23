@@ -543,20 +543,15 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 int monitor_redraw(struct monitor *monitor)
 {
-	monitor_arrange_clients(monitor);
-
 	if(monitor->needs_redraw) {
+		monitor_arrange_clients(monitor);
 		monitor_draw_clients(monitor);
-		/* monitor_draw(monitor); */
-		/* monitor_draw_bar() */
 
 		monitor->needs_redraw = 0;
 	}
 
 	_redraw_statusbar(monitor);
 	monitor_redraw_indicators(monitor);
-
-	XSync(mwm_get_display(monitor->mwm), False);
 
 	return(0);
 }
