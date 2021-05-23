@@ -1570,11 +1570,24 @@ int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
 		"spawn",
 		"show_workspace",
 		"move_to_workspace",
+		"set_layout",
+		"shift_focus",
+		"shift_client",
+		"shift_monitor_focus",
+		"shift_workspace",
+		"kbptr_move",
+		"kbptr_click",
 		"(invalid)"
 	};
+	int nameidx;
+
+	nameidx = sizeof(cmd_names) / sizeof(cmd_names[0]);
+	if(cmd >= 0 && cmd < nameidx) {
+		nameidx = cmd;
+	}
 
 	fprintf(stderr, "%s(%p, %d [%s], %p)\n", __func__, (void*)mwm,
-		cmd, cmd_names[cmd < MWM_CMD_MAX ? cmd : MWM_CMD_MAX], data);
+		cmd, cmd_names[nameidx], data);
 #endif /* MWM_DEBUG */
 
 	if(!mwm || cmd < 0 || cmd >= MWM_CMD_MAX) {
