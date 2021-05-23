@@ -125,7 +125,9 @@ static void _mwm_button_press(struct mwm *mwm, XEvent *event)
 	struct monitor *event_monitor;
 	struct client *event_client;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	button_pressed = &event->xbutton;
 
@@ -149,8 +151,9 @@ static void _mwm_button_press(struct mwm *mwm, XEvent *event)
 static void _mwm_client_message(struct mwm *mwm, XEvent *event)
 {
 	/* TODO: fullscreen toggle */
-
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	return;
 }
@@ -167,8 +170,9 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 	 * Otherwise we will override the request with the values that we have
 	 * stored in the client structure.
 	 */
-
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	configure_request = &event->xconfigurerequest;
 
@@ -231,7 +235,9 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 	int num_monitors;
 	int i;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	cevent = &event->xconfigure;
 
@@ -249,11 +255,13 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 	for(i = 0; i < num_monitors; i++) {
 		struct monitor *mon;
 
-		printf("Screen Info %d/%d: %d, %d, %d, %d\n",
-		       i,
-		       screen_info[i].screen_number,
-		       screen_info[i].x_org, screen_info[i].y_org,
-		       screen_info[i].width, screen_info[i].height);
+#if MWM_DEBUG
+		fprintf(stderr, "Screen Info %d/%d: %d, %d, %d, %d\n",
+			i,
+			screen_info[i].screen_number,
+			screen_info[i].x_org, screen_info[i].y_org,
+			screen_info[i].width, screen_info[i].height);
+#endif /* MWM_DEBUG */
 
 		if(loop_find(&mwm->monitors, FIND_MONITOR_BY_ID,
 			     &screen_info[i].screen_number, (void**)&mon) < 0) {
@@ -261,7 +269,7 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 				       screen_info[i].x_org, screen_info[i].y_org,
 				       screen_info[i].width, screen_info[i].height,
 				       &mon) < 0) {
-				printf("Could not allocate monitor\n");
+				fprintf(stderr, "Could not allocate monitor\n");
 				/* TODO: Let the user know */
 				return;
 			}
@@ -269,7 +277,7 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 			if(mwm_attach_monitor(mwm, mon) < 0) {
 				monitor_free(&mon);
 				/* TODO: Again, let the user know */
-				printf("Could not attach monitor\n");
+				fprintf(stderr, "Could not attach monitor\n");
 				return;
 			}
 		} else {
@@ -302,17 +310,17 @@ static void _mwm_destroy_notify(struct mwm *mwm, XDestroyWindowEvent *event)
 
 	/* get the client and detach it */
 #if MWM_DEBUG
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
 #endif /* MWM_DEBUG */
 
 	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) < 0) {
-		printf("Couldn't find client\n");
+		fprintf(stderr, "Couldn't find client\n");
 		return;
 	}
 
 	if(mwm_detach_client(mwm, client) < 0) {
-		printf("Couldn't detach client\n");
+		fprintf(stderr, "Couldn't detach client\n");
 		return;
 	}
 
@@ -329,7 +337,9 @@ static void _mwm_enter_notify(struct mwm *mwm, XCrossingEvent *event)
 	monitor = NULL;
 
 	/* pointer has entered a window - move focus, if it makes sense */
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	if((event->mode != NotifyNormal || event->detail == NotifyInferior) &&
 	   event->window == mwm->root) {
@@ -353,7 +363,9 @@ static void _mwm_expose(struct mwm *mwm, XExposeEvent *event)
 {
 	struct monitor *monitor;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	/* redraw the status bar, if we have one */
 
@@ -374,7 +386,9 @@ static void _mwm_focus_in(struct mwm *mwm, XFocusInEvent *event)
 	struct client *client;
 
 	/* move focus to the client referenced by the event */
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) < 0) {
@@ -393,7 +407,9 @@ static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
 	KeySym keysym;
 	unsigned int mask;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 #define BUTTONMASK              (ButtonPressMask | ButtonReleaseMask)
 #define ALLMODMASK              (Mod1Mask | Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask)
@@ -420,7 +436,9 @@ static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
 
 static void _mwm_mapping_notify(struct mwm *mwm, XMappingEvent *event)
 {
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	XRefreshKeyboardMapping(event);
 
@@ -435,7 +453,9 @@ static void _mwm_map_request(struct mwm *mwm, XMapRequestEvent *event)
 {
 	XWindowAttributes attrs;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	if(!XGetWindowAttributes(mwm->display, event->window, &attrs)) {
 		return;
@@ -469,7 +489,9 @@ static void _mwm_motion_notify(struct mwm *mwm, XMotionEvent *event)
 	struct monitor *monitor;
 	struct geom pointer_geom;
 
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	/* move focus to the monitor referenced in the event */
 	/* printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event); */
@@ -493,7 +515,9 @@ static void _mwm_motion_notify(struct mwm *mwm, XMotionEvent *event)
 
 static void _mwm_property_notify(struct mwm *mwm, XPropertyEvent *event)
 {
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+#endif /* MWM_DEBUG */
 
 	/* FIXME: Property notification handling must be implemented more thoroughly */
 
@@ -510,7 +534,7 @@ static void _mwm_unmap_notify(struct mwm *mwm, XUnmapEvent *event)
 	struct client *client;
 
 #if MWM_DEBUG
-	printf("%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
 #endif /* MWM_DEBUG */
 
         if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
@@ -1213,7 +1237,7 @@ int mwm_focus_monitor(struct mwm *mwm, struct monitor *monitor)
 
 	if(mwm->current_monitor != monitor) {
 #if MWM_DEBUG
-		printf("New current monitor: %p\n", (void*)monitor);
+		fprintf(stderr, "New current monitor: %p\n", (void*)monitor);
 #endif /* MWM_DEBUG */
 
 		monitor_needs_redraw(mwm->current_monitor);
@@ -1257,8 +1281,8 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 	}
 
 #if MWM_DEBUG
-	printf("Attaching client %p to workspace %p\n",
-	       (void*)client, (void*)workspace);
+	fprintf(stderr, "Attaching client %p to workspace %p\n",
+		(void*)client, (void*)workspace);
 #endif /* MWM_DEBUG */
 
 	return(workspace_attach_client(workspace, client));
@@ -1549,8 +1573,8 @@ int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
 		"(invalid)"
 	};
 
-	printf("%s(%p, %d [%s], %p)\n", __func__, (void*)mwm,
-	       cmd, cmd_names[cmd < MWM_CMD_MAX ? cmd : MWM_CMD_MAX], data);
+	fprintf(stderr, "%s(%p, %d [%s], %p)\n", __func__, (void*)mwm,
+		cmd, cmd_names[cmd < MWM_CMD_MAX ? cmd : MWM_CMD_MAX], data);
 #endif /* MWM_DEBUG */
 
 	if(!mwm || cmd < 0 || cmd >= MWM_CMD_MAX) {
