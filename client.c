@@ -8,6 +8,7 @@
 #include "workspace.h"
 #include "mwm.h"
 #include "monitor.h"
+#include "kbptr.h"
 
 struct client {
 	Window window;
@@ -267,11 +268,41 @@ int client_needs_redraw(struct client *client)
 
 int client_focus(struct client *client)
 {
+	Display *display;
+	Window dontcare_w;
+	int dontcare_i;
+	unsigned int dontcare_u;
+	struct geom extents;
+	int x;
+	int y;
+
 	if(!client) {
 		return(-EINVAL);
 	}
 
-	XSetInputFocus(mwm_get_display(__mwm), client->window, RevertToPointerRoot, CurrentTime);
+	display = mwm_get_display(__mwm);
+
+	XSetInputFocus(display, client->window, RevertToPointerRoot, CurrentTime);
+
+	/*
+	 * If the pointer is not over the focused client, move it over the client.
+	 * Because of the border, the window is actually slightly larger than what
+	 * the client geometry says, so we need to add some tolerance, otherwise
+	 * the pointer would suddenly jump to the center of the window when the
+	 * user is moving the pointer over the border.
+	 */
+	XQueryPointer(display, client->window, &dontcare_w, &dontcare_w,
+		      &x, &y, &dontcare_i, &dontcare_i, &dontcare_u);
+
+	extents.x = client->geom.x - 1;
+	extents.y = client->geom.y - 1;
+	extents.w = client->geom.x + client->geom.w + 1;
+	extents.h = client->geom.y + client->geom.h + 1;
+
+	if(!(x >= extents.x && y >= extents.y &&
+	     x <= extents.w && y <= extents.h)) {
+		kbptr_move(__mwm, client, KBPTR_CENTER);
+	}
 
 	return(0);
 }

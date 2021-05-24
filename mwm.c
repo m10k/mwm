@@ -1289,6 +1289,10 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 		(void*)client, (void*)workspace);
 #endif /* MWM_DEBUG */
 
+        XSelectInput(mwm->display, client_get_window(client),
+		     EnterWindowMask | FocusChangeMask |
+		     PropertyChangeMask | StructureNotifyMask);
+
 	return(workspace_attach_client(workspace, client));
 }
 

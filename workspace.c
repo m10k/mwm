@@ -176,7 +176,11 @@ int workspace_focus_client(struct workspace *workspace, struct client *client)
 		return(-EINVAL);
 	}
 
-	workspace->focused = client;
+	if(workspace->focused != client) {
+		workspace->focused = client;
+		workspace_needs_redraw(workspace);
+	}
+
 	return(0);
 }
 
