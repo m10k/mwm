@@ -179,6 +179,7 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
 			   &configure_request->window, &client) < 0) {
 		XWindowChanges changes;
+		unsigned int value_mask;
 
 		/* no client associated with that window */
 
@@ -189,9 +190,10 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 		changes.border_width = 0; /* TODO: make border width configurable */
 		changes.sibling = configure_request->above;
 		changes.stack_mode = configure_request->detail;
+		value_mask = configure_request->value_mask | CWBorderWidth;
 
 		XConfigureWindow(mwm->display, configure_request->window,
-				 configure_request->value_mask, &changes);
+				 value_mask, &changes);
 	} else {
 		struct geom requested_geom;
 
@@ -221,6 +223,7 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 		}
 
 		client_change_geometry(client, &requested_geom);
+		client_set_state(client, NormalState);
 	}
 
 	XSync(mwm->display, False);
