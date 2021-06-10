@@ -209,6 +209,7 @@ int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
 	mon->statusbar = mwm_create_window(mwm, x, y, w, STATUSBAR_HEIGHT);
 	mon->gfx_context = mwm_create_gc(mwm);
 	mon->xft_context = mwm_create_xft_context(mwm, (Drawable)mon->statusbar);
+	XMapRaised(mwm_get_display(mwm), mon->statusbar);
 
 	_indicator_update_geometry(mon);
 
@@ -540,8 +541,6 @@ static int _redraw_statusbar(struct monitor *monitor)
 		       status_width - 1, STATUSBAR_HEIGHT - 1);
 	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status,
 			status_x + dwdata.text_padding, dwdata.text_padding);
-
-	XMapRaised(display, monitor->statusbar);
 
 	return(0);
 }
