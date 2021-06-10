@@ -23,6 +23,7 @@ struct indicator {
 	Window window;
 	struct geom geom;
 	GC gfx_context;
+	XftDraw *xft_context;
 	int orientation;
 };
 
@@ -58,6 +59,7 @@ static void _indicator_update_window(struct indicator *indicator, struct monitor
 						      indicator->geom.x, indicator->geom.y,
 						      indicator->geom.w, indicator->geom.h);
 		indicator->gfx_context = mwm_create_gc(monitor->mwm);
+		indicator->xft_context = mwm_create_xft_context(monitor->mwm, (Drawable)indicator->window);
 		XMapRaised(mwm_get_display(monitor->mwm), indicator->window);
 	}
 
@@ -107,9 +109,13 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 	Display *display;
 	Window root;
 	mwm_palette_t palette;
+	int font_height;
+	int font_padding;
 
 	display = mwm_get_display(monitor->mwm);
 	root = mwm_get_root_window(monitor->mwm);
+	font_height = mwm_get_font_height(monitor->mwm);
+	font_padding = (INDICATOR_HEIGHT - 2 * INDICATOR_PADDING - font_height) / 2;
 
 	XCopyArea(display, root, indicator->window, indicator->gfx_context,
 		  indicator->geom.x, indicator->geom.y,
@@ -146,8 +152,22 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		XSetForeground(display, indicator->gfx_context, bg_color);
 		XDrawRectangle(display, indicator->window, indicator->gfx_context,
 			       focus_pos.x, focus_pos.y, focus_pos.w, focus_pos.h);
+
+		if(indicator->orientation == HINDICATOR) {
+			char caption[256];
+			struct geom client_pos;
+
+			client_get_geometry(focused, &client_pos);
+
+			snprintf(caption, sizeof(caption), "W=0x%lx %dx%d+%d+%d",
+				 client_get_window(focused), client_pos.x, client_pos.y,
+				 client_pos.w, client_pos.h);
+
+			mwm_render_text(monitor->mwm, indicator->xft_context, palette, caption,
+					focus_pos.x + font_padding,
+					focus_pos.y + font_padding);
+		}
 	}
-	/* XSync(display, False); ? */
 
 	return;
 }
