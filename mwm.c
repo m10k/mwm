@@ -57,6 +57,7 @@ struct mwm {
 
 	struct {
 		PangoLayout *layout;
+		PangoLayout *vlayout;
 		int ascent;
 		int descent;
 		int height;
@@ -367,7 +368,7 @@ static void _mwm_expose(struct mwm *mwm, XExposeEvent *event)
 	struct monitor *monitor;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p, %p) W=0x%lx\n", __func__, (void*)mwm, (void*)event, event->window);
 #endif /* MWM_DEBUG */
 
 	/* redraw the status bar, if we have one */
@@ -1034,8 +1035,8 @@ static void _find_existing_clients(struct mwm *mwm)
 int mwm_init(struct mwm *mwm)
 {
 	extern struct theme config_theme;
-	PangoFontMap *fontmap;
 	PangoContext *context;
+	PangoFontMap *fontmap;
 	PangoFontDescription *fontdesc;
 	PangoFontMetrics *fontmetrics;
 
@@ -1078,23 +1079,30 @@ int mwm_init(struct mwm *mwm)
 	x_configure_notify(mwm->display, mwm->root, NULL, 0);
 
 	fontmap = pango_xft_get_font_map(mwm->display, mwm->screen);
-	context = pango_font_map_create_context(fontmap);
 	fontdesc = pango_font_description_from_string(config_theme.statusbar_font);
+
+	/* set up the pango context/layout for horizontal text */
+	context = pango_font_map_create_context(fontmap);
 	mwm->font.layout = pango_layout_new(context);
 	pango_layout_set_font_description(mwm->font.layout, fontdesc);
-
 	fontmetrics = pango_context_get_metrics(context, fontdesc, NULL);
+	g_object_unref(context);
+
 	mwm->font.ascent = pango_font_metrics_get_ascent(fontmetrics) / PANGO_SCALE;
 	mwm->font.descent = pango_font_metrics_get_descent(fontmetrics) / PANGO_SCALE;
 	mwm->font.height = mwm->font.ascent + mwm->font.descent;
+	pango_font_metrics_unref(fontmetrics);
+
+	/* set up the pango context/layout for vertical text */
+	context = pango_font_map_create_context(fontmap);
+	mwm->font.vlayout = pango_layout_new(context);
+	pango_layout_set_font_description(mwm->font.vlayout, fontdesc);
+	g_object_unref(context);
 
 	_palette_init(mwm, &(mwm->palette[MWM_PALETTE_ACTIVE]),
 		      &config_theme.active);
 	_palette_init(mwm, &(mwm->palette[MWM_PALETTE_INACTIVE]),
 		      &config_theme.inactive);
-
-	pango_font_metrics_unref(fontmetrics);
-	g_object_unref(context);
 
 	mwm->commands[MWM_CMD_QUIT] = _cmd_quit;
 	mwm->commands[MWM_CMD_SPAWN] = _cmd_spawn;
@@ -1132,6 +1140,37 @@ int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
 				mwm->font.layout,
 				x * PANGO_SCALE,
 				y * PANGO_SCALE);
+
+	return(0);
+}
+
+int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
+			     mwm_palette_t palette, const char *text,
+			     const int x, const int y)
+{
+	PangoMatrix matrix = PANGO_MATRIX_INIT;
+	PangoContext *context;
+	XftColor *color;
+	PangoRectangle extents;
+
+	if(!mwm || ! drawable || !text) {
+		return(-EINVAL);
+	}
+
+	context = pango_layout_get_context(mwm->font.vlayout);
+	color = &mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
+
+	pango_matrix_translate(&matrix, x, y);
+	pango_matrix_rotate(&matrix, -90.0);
+	pango_context_set_matrix(context, &matrix);
+	pango_context_set_base_gravity(context, PANGO_GRAVITY_EAST);
+
+	pango_layout_set_attributes(mwm->font.vlayout, NULL);
+	pango_layout_set_markup(mwm->font.vlayout, text, -1);
+	pango_layout_get_extents(mwm->font.vlayout, NULL, &extents);
+
+	pango_xft_render_layout(drawable, color, mwm->font.vlayout,
+				0, -1.0 * extents.height);
 
 	return(0);
 }

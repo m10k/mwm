@@ -69,6 +69,9 @@ XftDraw* mwm_create_xft_context(struct mwm *mwm, Drawable drawable);
 int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
 		    mwm_palette_t palette, const char *text,
 		    const int x, const int y);
+int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
+			     mwm_palette_t palette, const char *text,
+			     const int x, const int y);
 int mwm_get_font_height(struct mwm *mwm);
 int mwm_get_text_width(struct mwm *mwm, const char *text);
 unsigned long mwm_get_color(struct mwm *mwm, mwm_palette_t palette, mwm_color_t color);
