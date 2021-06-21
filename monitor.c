@@ -13,8 +13,8 @@
 #include "layout.h"
 
 #define STATUSBAR_HEIGHT 32
-#define INDICATOR_HEIGHT 32
-#define INDICATOR_PADDING 8
+#define INDICATOR_HEIGHT 64
+#define INDICATOR_PADDING 16
 
 #define HINDICATOR 0
 #define VINDICATOR 1
@@ -30,6 +30,8 @@ struct indicator {
 struct monitor {
 	int id;
 	Window statusbar;
+	Drawable draw_buffer;
+
 	GC gfx_context;
 	XftDraw *xft_context;
 
@@ -233,7 +235,8 @@ int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
 
 	mon->statusbar = mwm_create_window(mwm, x, y, w, STATUSBAR_HEIGHT);
 	mon->gfx_context = mwm_create_gc(mwm);
-	mon->xft_context = mwm_create_xft_context(mwm, (Drawable)mon->statusbar);
+	mon->draw_buffer = mwm_create_pixmap(mwm, 0, w, STATUSBAR_HEIGHT);
+	mon->xft_context = mwm_create_xft_context(mwm, mon->draw_buffer);
 	XMapRaised(mwm_get_display(mwm), mon->statusbar);
 
 	_indicator_update_geometry(mon);
@@ -302,6 +305,9 @@ int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 	XMoveResizeWindow(mwm_get_display(monitor->mwm), monitor->statusbar,
 			  monitor->geom.x, monitor->geom.y,
 			  monitor->geom.w, STATUSBAR_HEIGHT);
+	mwm_free_pixmap(monitor->mwm, monitor->draw_buffer);
+	monitor->draw_buffer = mwm_create_pixmap(monitor->mwm, 0, monitor->geom.w, STATUSBAR_HEIGHT);
+	XftDrawChange(monitor->xft_context, monitor->draw_buffer);
 
 	return(0);
 }
@@ -478,7 +484,7 @@ static int _draw_workspace_button(struct mwm *mwm, struct workspace *workspace, 
 	XSetForeground(dwdata->display, dwdata->monitor->gfx_context,
 		       mwm_get_color(mwm, dwdata->palette, color));
 
-	XFillRectangle(dwdata->display, dwdata->monitor->statusbar,
+	XFillRectangle(dwdata->display, dwdata->monitor->draw_buffer,
 		       dwdata->monitor->gfx_context, x, 0,
 		       button_width, STATUSBAR_HEIGHT);
 
@@ -489,7 +495,7 @@ static int _draw_workspace_button(struct mwm *mwm, struct workspace *workspace, 
 	if(workspace_get_focused_client(workspace)) {
 		XSetForeground(dwdata->display, dwdata->monitor->gfx_context,
 			       mwm_get_color(mwm, dwdata->palette, MWM_COLOR_CLIENT_INDICATOR));
-		XFillRectangle(dwdata->display, dwdata->monitor->statusbar,
+		XFillRectangle(dwdata->display, dwdata->monitor->draw_buffer,
 			       dwdata->monitor->gfx_context, x + 2, 2, button_width - 4, 2);
 	}
 
@@ -503,7 +509,6 @@ static int _redraw_statusbar(struct monitor *monitor)
 	struct _draw_workspace_data dwdata;
 	struct monitor *focused_monitor;
 	Display *display;
-	Window root;
 	int status_x;
 	int status_width;
 	int workspace_button_width;
@@ -514,16 +519,8 @@ static int _redraw_statusbar(struct monitor *monitor)
 	}
 
 	display = mwm_get_display(monitor->mwm);
-	root = mwm_get_root_window(monitor->mwm);
 	focused_monitor = mwm_get_focused_monitor(monitor->mwm);
 	status[0] = 0;
-
-	/* start with background from root */
-	XCopyArea(display, root, monitor->statusbar,
-		  monitor->gfx_context,
-		  monitor->geom.x, monitor->geom.y,
-		  monitor->geom.w, STATUSBAR_HEIGHT,
-		  0, 0);
 
 	/* draw the workspace buttons */
 	dwdata.monitor = monitor;
@@ -552,20 +549,25 @@ static int _redraw_statusbar(struct monitor *monitor)
 	if(status_x < workspace_button_width) {
 		status_x = workspace_button_width;
 		status_width = monitor->geom.w - status_x;
+	} else if(status_x > workspace_button_width) {
+		XSetForeground(display, monitor->gfx_context,
+			       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_FOCUSED));
+		XFillRectangle(display, monitor->draw_buffer,
+			       monitor->gfx_context, workspace_button_width, 0,
+			       status_x - workspace_button_width, STATUSBAR_HEIGHT);
 	}
 
 	XSetForeground(display, monitor->gfx_context,
-		       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_FOCUSED));
-	XDrawRectangle(display, monitor->statusbar,
-		       monitor->gfx_context, status_x, 0,
-		       status_width, STATUSBAR_HEIGHT - 1);
-	XSetForeground(display, monitor->gfx_context,
 		       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_BACKGROUND));
-	XFillRectangle(display, monitor->statusbar,
-		       monitor->gfx_context, status_x + 1, 0,
-		       status_width - 1, STATUSBAR_HEIGHT - 1);
+	XFillRectangle(display, monitor->draw_buffer,
+		       monitor->gfx_context, status_x, 0,
+		       status_width, STATUSBAR_HEIGHT);
+
 	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status,
 			status_x + dwdata.text_padding, dwdata.text_padding);
+
+	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
+		  0, 0, monitor->geom.w, STATUSBAR_HEIGHT, 0, 0);
 
 	return(0);
 }

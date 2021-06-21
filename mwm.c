@@ -1528,6 +1528,18 @@ XftDraw* mwm_create_xft_context(struct mwm *mwm, Drawable drawable)
 			     DefaultColormap(mwm->display, mwm->screen)));
 }
 
+Drawable mwm_create_pixmap(struct mwm *mwm, Window window, const int width, const int height)
+{
+	return(XCreatePixmap(mwm->display, window ? window : mwm->root, width, height,
+			     DefaultDepth(mwm->display, mwm->screen)));
+}
+
+void mwm_free_pixmap(struct mwm *mwm, Drawable drawable)
+{
+	XFreePixmap(mwm->display, drawable);
+	return;
+}
+
 int mwm_get_font_height(struct mwm *mwm)
 {
 	return(mwm->font.height);
