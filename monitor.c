@@ -309,6 +309,8 @@ int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 	monitor->draw_buffer = mwm_create_pixmap(monitor->mwm, 0, monitor->geom.w, STATUSBAR_HEIGHT);
 	XftDrawChange(monitor->xft_context, monitor->draw_buffer);
 
+	_indicator_update_geometry(monitor);
+
 	return(0);
 }
 
