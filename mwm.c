@@ -1335,6 +1335,8 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 		     EnterWindowMask | FocusChangeMask |
 		     PropertyChangeMask | StructureNotifyMask);
 
+	client_set_state(client, NormalState);
+
 	return(workspace_attach_client(workspace, client));
 }
 
