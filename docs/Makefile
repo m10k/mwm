@@ -1,5 +1,5 @@
 ifeq ($(PREFIX), )
-	PREFIX = /usr/local
+	PREFIX = /usr
 endif
 
 ifeq ($(MANPREFIX), )

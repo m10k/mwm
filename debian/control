@@ -1,0 +1,17 @@
+Source: mwm
+Priority: optional
+Maintainer: Matthias Kruk <m@m10k.eu>
+Build-Depends: debhelper (>= 9), make, coreutils, gcc, pkg-config, libxinerama-dev, libpango1.0-dev, libx11-dev, libxft-dev
+Standards-Version: 3.9.8
+Section: x11
+Homepage: https://github.com/m10k/mwm
+
+Package: mwm
+Section: x11
+Architecture: any
+Depends: libc6, libxinerama1, libpango-1.0-0, libx11-6, libpangoxft-1.0-0, libxft2, ${shlibs:Depends}
+Description: Keyboard-first tiling window manager
+ A tiling window manager that is controlled entirely using
+ keyboard shortcuts. I developed this window manager because
+ I was unhappy with the way dwm handles clients in multi-head
+ setups. You are not expected to like this window manager.
