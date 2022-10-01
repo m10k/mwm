@@ -1,4 +1,4 @@
-DEPS = src
+DEPS = docs src
 OUTPUT = mwm
 PHONY = $(DEPS) clean install uninstall
 
