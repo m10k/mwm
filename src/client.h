@@ -41,5 +41,6 @@ int client_needs_redraw(struct client *client);
 int client_focus(struct client *client);
 
 int client_set_state(struct client *client, long state);
+void client_property_notify(struct client *client, XPropertyEvent *event);
 
 #endif /* MWM_CLIENT_H */

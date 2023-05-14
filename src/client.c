@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include "common.h"
 #include "client.h"
 #include "workspace.h"
@@ -323,4 +324,44 @@ int client_set_state(struct client *client, const long state)
 			wm_state, wm_state, 32,
 			PropModeReplace, (unsigned char*)data, 2);
         return(0);
+}
+
+static void _client_update_wm_hints(struct client *client)
+{
+	XWMHints *hints;
+
+	hints = XGetWMHints(mwm_get_display(__mwm),
+			    client->window);
+
+	if (hints) {
+		if (hints->flags & XUrgencyHint) {
+			hints->flags &= ~XUrgencyHint;
+			XSetWMHints(mwm_get_display(__mwm),
+				    client->window, hints);
+		}
+
+		XFree(hints);
+	}
+}
+
+void client_property_notify(struct client *client, XPropertyEvent *event)
+{
+	switch (event->atom) {
+	case XA_WM_TRANSIENT_FOR:
+		if (client->workspace) {
+			workspace_needs_redraw(client->workspace);
+		}
+		break;
+
+	case XA_WM_NORMAL_HINTS:
+		/* ignore size hints */
+		break;
+
+	case XA_WM_HINTS:
+		_client_update_wm_hints(client);
+		break;
+
+	default:
+		break;
+	}
 }

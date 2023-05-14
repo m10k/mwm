@@ -528,6 +528,13 @@ static void _mwm_property_notify(struct mwm *mwm, XPropertyEvent *event)
 	if((event->window == mwm->root)) {
 		/* if(event->atom == XA_WM_NAME) */
 		mwm_needs_redraw(mwm);
+	} else {
+		struct client *event_client;
+
+		if (mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+				    &event->window, &event_client) == 0) {
+			client_property_notify(event_client, event);
+		}
 	}
 
 	return;
