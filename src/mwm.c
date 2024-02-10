@@ -232,6 +232,81 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 	return;
 }
 
+static int _monitor_in_screen_info(struct monitor *monitor, XineramaScreenInfo *screen_info, int num_monitors)
+{
+	int monitor_id;
+	int i;
+
+	monitor_id = monitor_get_id(monitor);
+
+	for (i = 0; i < num_monitors; i++) {
+		if (screen_info[i].screen_number == monitor_id) {
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+static int _cleanup_disconnected_monitor(struct mwm *mwm, XineramaScreenInfo *screen_info, int num_monitors)
+{
+	loop_iter_t iter;
+	loop_iter_t start;
+
+	if (!mwm->monitors) {
+		return 1;
+	}
+
+	start = iter = loop_get_iter(&mwm->monitors);
+	do {
+		struct monitor *mon;
+
+		mon = (struct monitor*)loop_iter_get_data(iter);
+
+		if (!_monitor_in_screen_info(mon, screen_info, num_monitors)) {
+#if MWM_DEBUG
+			fprintf(stderr, "Monitor %d not found in screen info\n", monitor_get_id(mon));
+#endif /* MWM_DEBUG */
+			mwm_detach_monitor(mwm, mon);
+			monitor_free(&mon);
+			return 0;
+		}
+
+		loop_iter_inc(iter);
+	} while (iter != start);
+
+	return 1;
+}
+
+static void _cleanup_disconnected_monitors(struct mwm *mwm, XineramaScreenInfo *screen_info, int num_monitors)
+{
+	int done;
+#if MWM_DEBUG
+	int disconnected;
+
+	disconnected = 0;
+
+	fprintf(stderr, "Cleaning up disconnected monitors\n");
+#endif /* MWM_DEBUG */
+
+	/*
+	 * We cannot keep iterating over the loop after removing from it, so we
+	 * remove one and start over, until no disconnected monitors are left.
+	 */
+	do {
+		done = _cleanup_disconnected_monitor(mwm, screen_info, num_monitors);
+#if MWM_DEBUG
+		if (!done) {
+			disconnected++;
+		}
+#endif /* MWM_DEBUG */
+	} while (!done);
+#if MWM_DEBUG
+	fprintf(stderr, "Cleaned up %d monitors\n", disconnected);
+#endif /* MWM_DEBUG */
+	return;
+}
+
 static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 {
 	XConfigureEvent *cevent;
@@ -299,7 +374,7 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 		}
 	}
 
-	/* TODO: check if monitors have been removed */
+	_cleanup_disconnected_monitors(mwm, screen_info, num_monitors);
 
 	if(screen_info) {
 		XFree(screen_info);
