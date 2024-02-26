@@ -10,7 +10,6 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/Xproto.h>
-#include <X11/extensions/Xinerama.h>
 #include <X11/Xft/Xft.h>
 #include <X11/XKBlib.h>
 #include <pango/pango.h>
@@ -25,6 +24,7 @@
 #include "client.h"
 #include "theme.h"
 #include "kbptr.h"
+#include "xrandr.h"
 
 typedef void (_mwm_xhandler_t)(struct mwm*, XEvent*);
 
@@ -52,6 +52,7 @@ struct mwm {
 	struct loop *workspaces;
 	struct monitor *current_monitor;
 	struct client *focused_client;
+	struct xrandr *xrandr;
 
 	_mwm_xhandler_t *xhandler[LASTEvent];
 
@@ -235,9 +236,6 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 {
 	XConfigureEvent *cevent;
-	XineramaScreenInfo *screen_info;
-	int num_monitors;
-	int i;
 
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
@@ -251,58 +249,6 @@ static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
 
 	if(x_get_geom(mwm->display, mwm->root, &mwm->root_geom) < 0) {
 		mwm_stop(mwm);
-		return;
-	}
-
-	screen_info = XineramaQueryScreens(mwm->display, &num_monitors);
-
-	for(i = 0; i < num_monitors; i++) {
-		struct monitor *mon;
-
-#if MWM_DEBUG
-		fprintf(stderr, "Screen Info %d/%d: %d, %d, %d, %d\n",
-			i,
-			screen_info[i].screen_number,
-			screen_info[i].x_org, screen_info[i].y_org,
-			screen_info[i].width, screen_info[i].height);
-#endif /* MWM_DEBUG */
-
-		if(loop_find(&mwm->monitors, FIND_MONITOR_BY_ID,
-			     &screen_info[i].screen_number, (void**)&mon) < 0) {
-			if(monitor_new(mwm, screen_info[i].screen_number,
-				       screen_info[i].x_org, screen_info[i].y_org,
-				       screen_info[i].width, screen_info[i].height,
-				       &mon) < 0) {
-				fprintf(stderr, "Could not allocate monitor\n");
-				/* TODO: Let the user know */
-				return;
-			}
-
-			if(mwm_attach_monitor(mwm, mon) < 0) {
-				monitor_free(&mon);
-				/* TODO: Again, let the user know */
-				fprintf(stderr, "Could not attach monitor\n");
-				return;
-			}
-		} else {
-			struct geom new_geom;
-
-			/* update geometry */
-			new_geom.x = screen_info[i].x_org;
-			new_geom.y = screen_info[i].y_org;
-			new_geom.w = screen_info[i].width;
-			new_geom.h = screen_info[i].height;
-
-			if(monitor_set_geometry(mon, &new_geom) < 0) {
-				/* TODO: Let the user know */
-			}
-		}
-	}
-
-	/* TODO: check if monitors have been removed */
-
-	if(screen_info) {
-		XFree(screen_info);
 	}
 
 	return;
@@ -568,6 +514,61 @@ static void _mwm_unmap_notify(struct mwm *mwm, XUnmapEvent *event)
 	XSetErrorHandler(_xerror_handle);
 	XUngrabServer(mwm->display);
 
+	return;
+}
+
+static void _attach_monitor(struct xrandr *xrr,
+			    xrandr_crtc_t crtc,
+			    struct geom *geom,
+			    struct mwm *mwm)
+{
+	struct monitor *mon;
+
+	if (monitor_new(mwm, crtc, geom->x, geom->y, geom->w, geom->h, &mon) < 0) {
+		fprintf(stderr, "Ran out of memory trying to allocate a monitor\n");
+		return;
+	}
+
+	if (mwm_attach_monitor(mwm, mon) < 0) {
+		fprintf(stderr, "Could not attach monitor %lx\n", crtc);
+		monitor_free(&mon);
+	}
+
+	return;
+}
+
+static void _detach_monitor(struct xrandr *xrr,
+			    xrandr_crtc_t crtc,
+			    struct geom *geom,
+			    struct mwm *mwm)
+{
+	struct monitor *mon;
+
+	if (loop_find(&mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+		fprintf(stderr, "Monitor %lx not attached\n", crtc);
+		return;
+	}
+
+	mwm_detach_monitor(mwm, mon);
+	monitor_free(&mon);
+
+	return;
+}
+
+static void _change_monitor_geometry(struct xrandr *xrr,
+				     xrandr_crtc_t crtc,
+				     struct geom *geom,
+				     struct mwm *mwm)
+{
+	struct monitor *mon;
+
+	if (loop_find(&mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+		fprintf(stderr, "%s: Could not find monitor %lx\n", __func__, crtc);
+		return;
+	}
+
+	fprintf(stderr, "Crtc %lx changed geometry to [%dx%d @ %d,%d]\n", crtc, geom->w, geom->h, geom->x, geom->y);
+	monitor_set_geometry(mon, geom);
 	return;
 }
 
@@ -1046,6 +1047,7 @@ int mwm_init(struct mwm *mwm)
 	PangoFontMap *fontmap;
 	PangoFontDescription *fontdesc;
 	PangoFontMetrics *fontmetrics;
+	int err;
 
 	if(!mwm) {
 		return(-EINVAL);
@@ -1066,6 +1068,31 @@ int mwm_init(struct mwm *mwm)
 	if(!mwm->xerror_default_handler) {
 		return(-EIO);
 	}
+
+	if ((err = xrandr_new(&mwm->xrandr, mwm->display, mwm->root)) < 0) {
+		switch (err) {
+		case -ENOTSUP:
+			fprintf(stderr, "XRandR is required but not supported by the X server\n");
+			break;
+
+		case -ENOMEM:
+			fprintf(stderr, "Not enough memory to initialize XRandR extension\n");
+			break;
+
+		default:
+			fprintf(stderr, "Bug in initialization of XRandR extension\n");
+			break;
+		}
+
+		return err;
+	}
+
+	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_ATTACHED,
+	                    (xrandr_func_t*)_attach_monitor, mwm);
+	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_DETACHED,
+	                    (xrandr_func_t*)_detach_monitor, mwm);
+	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_GEOMETRY_CHANGED,
+			    (xrandr_func_t*)_change_monitor_geometry, mwm);
 
 	XSelectInput(mwm->display, mwm->root,
 		     SubstructureRedirectMask |
@@ -1123,6 +1150,7 @@ int mwm_init(struct mwm *mwm)
 	mwm->commands[MWM_CMD_KBPTR_MOVE] = _cmd_kbptr_move;
 	mwm->commands[MWM_CMD_KBPTR_CLICK] = _cmd_kbptr_click;
 
+	xrandr_update(mwm->xrandr);
 	_find_existing_clients(mwm);
 
 	return(0);
@@ -1203,8 +1231,12 @@ int mwm_run(struct mwm *mwm)
 
 		do {
 			if(XNextEvent(mwm->display, &event) == 0) {
-				if(mwm->xhandler[event.type]) {
-					mwm->xhandler[event.type](mwm, &event);
+				if (event.type < (sizeof(mwm->xhandler) / sizeof(mwm->xhandler[0]))) {
+					if(mwm->xhandler[event.type]) {
+						mwm->xhandler[event.type](mwm, &event);
+					}
+				} else {
+					xrandr_handle_event(mwm->xrandr, &event);
 				}
 			}
 		} while(XEventsQueued(mwm->display, QueuedAfterFlush) > 0);
