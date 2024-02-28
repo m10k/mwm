@@ -3,11 +3,11 @@ Upstream-Name: mwm
 Source: https://github.com/m10k/mwm
 
 Files: *
-Copyright: 2021-2022 Matthias Kruk <m@m10k.eu>
+Copyright: 2021-2024 Matthias Kruk <m@m10k.eu>
 License: GPL-3.0+
 
 Files: debian/*
-Copyright: 2022 Matthias Kruk <m@m10k.eu>
+Copyright: 2022-2024 Matthias Kruk <m@m10k.eu>
 License: GPL-3.0+
 
 License: GPL-3.0+

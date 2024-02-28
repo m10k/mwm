@@ -1,3 +1,17 @@
+mwm (0.2-1) unstable; urgency=medium
+
+  * Features added
+    - Use XRandR for handling output devices
+
+  * Features removed
+    - Xinerama support
+
+  * Improvements
+    - Add handling of PropertyNotify events on clients
+
+ -- Matthias Kruk <m@m10k.eu>  Mon, 26 Feb 2024 19:38:05 +0900
+
+
 mwm (0.1-1) unstable; urgency=medium
 
   * Initial release
