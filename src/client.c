@@ -14,6 +14,7 @@
 struct client {
 	Window window;
 	struct geom geom;
+	struct geom pointer;
 	int needs_redraw;
 
 	int border_width;
@@ -40,6 +41,10 @@ int client_new(Window window, XWindowAttributes *attrs, struct client **client)
 	memset(cl, 0, sizeof(*cl));
 
 	cl->window = window;
+	cl->pointer.x = -1;
+	cl->pointer.y = -1;
+	cl->pointer.w = 1;
+	cl->pointer.h = 1;
 	*client = cl;
 
 	return(0);
@@ -302,10 +307,92 @@ int client_focus(struct client *client)
 
 	if(!(x >= extents.x && y >= extents.y &&
 	     x <= extents.w && y <= extents.h)) {
-		kbptr_move(__mwm, client, KBPTR_CENTER);
+		client_restore_pointer(client);
 	}
 
 	return(0);
+}
+
+int client_save_pointer(struct client *client)
+{
+	Display *display;
+	Window dontcare_w;
+	int dontcare_i;
+	unsigned int dontcare_u;
+
+	display = mwm_get_display(__mwm);
+
+	XQueryPointer(display, client->window, &dontcare_w, &dontcare_w,
+	              &client->pointer.x, &client->pointer.y, &dontcare_i,
+	              &dontcare_i, &dontcare_u);
+
+	client->pointer.x -= client->geom.x;
+	client->pointer.y -= client->geom.y;
+	client->pointer.w = client->geom.w;
+	client->pointer.h = client->geom.h;
+
+#ifdef MWM_DEBUG
+	fprintf(stderr, "Saved pointer: (%d, %d), %dx%d\n",
+	        client->pointer.x, client->pointer.y,
+	        client->pointer.w, client->pointer.h);
+#endif /* MWM_DEBUG */
+
+	return 0;
+}
+
+static void _client_scale_pointer(struct client *client)
+{
+	double w_scale;
+	double h_scale;
+	double new_x;
+	double new_y;
+
+	w_scale = (double)client->geom.w / (double)client->pointer.w;
+	h_scale = (double)client->geom.h / (double)client->pointer.h;
+
+	new_x = (double)client->pointer.x * w_scale;
+	new_y = (double)client->pointer.y * h_scale;
+
+#ifdef MWM_DEBUG
+	fprintf(stderr, "Scaling pointer (%d, %d) -> (%d, %d)\n",
+	        client->pointer.x, client->pointer.y,
+	        (int)new_x, (int)new_y);
+#endif /* MWM_DEBUG */
+
+	client->pointer.x = (int)new_x;
+	client->pointer.y = (int)new_y;
+	client->pointer.w = client->geom.w;
+	client->pointer.h = client->geom.h;
+
+	return;
+}
+
+int client_restore_pointer(struct client *client)
+{
+	Display *display;
+
+	display = mwm_get_display(__mwm);
+
+#ifdef MWM_DEBUG
+	fprintf(stderr, "Restoring pointer (%d, %d), %dx%d\n",
+	        client->pointer.x, client->pointer.y,
+	        client->pointer.w, client->pointer.y);
+#endif /* MWM_DEBUG */
+
+	if (client->pointer.x < 0 || client->pointer.y < 0) {
+		kbptr_move(__mwm, client, KBPTR_CENTER);
+	} else {
+		/* scale the pointer position if the client was resized */
+		if (client->geom.w != client->pointer.w ||
+		    client->geom.h != client->pointer.h) {
+			_client_scale_pointer(client);
+		}
+
+		XWarpPointer(display, None, client->window, 0, 0, 0, 0,
+		             client->pointer.x, client->pointer.y);
+	}
+
+	return 0;
 }
 
 int client_set_state(struct client *client, const long state)

@@ -841,6 +841,12 @@ static void _cmd_shift_monitor_focus(struct mwm *mwm, void *arg)
 	}
 
 	if(src_monitor != dst_monitor) {
+		struct client *src_client;
+
+		if ((src_client = monitor_get_focused_client(src_monitor))) {
+			client_save_pointer(src_client);
+		}
+
 		mwm_focus_monitor(mwm, dst_monitor);
 
 		monitor_needs_redraw(src_monitor);

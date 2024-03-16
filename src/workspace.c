@@ -330,6 +330,7 @@ int workspace_count_tiled_clients(struct workspace *workspace)
 
 int workspace_shift_focus(struct workspace *workspace, int dir)
 {
+	struct client *old_focus;
 	struct client *new_focus;
 
 	if(!workspace || dir == 0) {
@@ -346,6 +347,10 @@ int workspace_shift_focus(struct workspace *workspace, int dir)
 				 (void**)&new_focus) < 0) {
 			return(-EFAULT);
 		}
+	}
+
+	if ((old_focus = workspace_get_focused_client(workspace))) {
+		client_save_pointer(old_focus);
 	}
 
 	workspace_focus_client(workspace, new_focus);
