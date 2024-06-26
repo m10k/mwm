@@ -335,6 +335,7 @@ int loop_shift_forwards(struct loop **loop, void *data)
 {
 	struct loop *iter;
 	struct loop *next;
+	void *swap;
 
 	if(!loop || !data) {
 		return(-EINVAL);
@@ -346,18 +347,9 @@ int loop_shift_forwards(struct loop **loop, void *data)
 
 	next = iter->next;
 
-	iter->prev->next = next;
-	next->prev = iter->prev;
-	next->next->prev = iter;
-	iter->next = next->next;
-	iter->prev = next;
-	next->next = iter;
-
-	if(*loop == iter) {
-		*loop = iter->prev;
-	} else if(*loop == iter->prev) {
-		*loop = iter;
-	}
+	swap = next->data;
+	next->data = iter->data;
+	iter->data = swap;
 
 	return(0);
 }
@@ -365,30 +357,22 @@ int loop_shift_forwards(struct loop **loop, void *data)
 int loop_shift_backwards(struct loop **loop, void *data)
 {
 	struct loop *iter;
-	struct loop *next;
+	struct loop *prev;
+	void *swap;
 
 	if(!loop || !data) {
 		return(-EINVAL);
 	}
 
-	if(__loop_find(loop, NULL, data, &next) < 0) {
+	if(__loop_find(loop, NULL, data, &iter) < 0) {
 		return(-ENOENT);
 	}
 
-	iter = next->prev;
+	prev = iter->prev;
 
-	iter->prev->next = next;
-	next->prev = iter->prev;
-	next->next->prev = iter;
-	iter->next = next->next;
-	iter->prev = next;
-	next->next = iter;
-
-	if(*loop == next) {
-		*loop = next->next;
-	} else if(*loop == next->next) {
-		*loop = next;
-	}
+	swap = prev->data;
+	prev->data = iter->data;
+	iter->data = swap;
 
 	return(0);
 }
