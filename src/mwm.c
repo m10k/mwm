@@ -1305,13 +1305,26 @@ int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon)
 int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon)
 {
 	struct workspace *workspace;
+	struct monitor *next_monitor;
+
+	next_monitor = NULL;
 
 	if(!mwm || !mon) {
 		return(-EINVAL);
 	}
 
+	loop_get_next(&mwm->monitors, mon, (void**)&next_monitor);
+
 	if(loop_remove(&mwm->monitors, mon) < 0) {
 		return(-ENODEV);
+	}
+
+	if (mwm->current_monitor == mon) {
+#if MWM_DEBUG
+		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
+		        __func__, (void*)mon, (void*)next_monitor);
+#endif /* MWM_DEBUG */
+		mwm_focus_monitor(mwm, next_monitor);
 	}
 
 	workspace = monitor_get_workspace(mon);
