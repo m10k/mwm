@@ -329,8 +329,16 @@ static void _handle_crtc_change_event(struct xrandr *xrr, XRRCrtcChangeNotifyEve
 
 	geom.x = event->x;
 	geom.y = event->y;
-	geom.w = event->width;
-	geom.h = event->height;
+
+	/* Have to switch width and height if the output is rotated */
+	if (event->rotation == RR_Rotate_90 ||
+	    event->rotation == RR_Rotate_270) {
+		geom.w = event->height;
+		geom.h = event->width;
+	} else {
+		geom.w = event->width;
+		geom.h = event->height;
+	}
 
 	_update_crtc(xrr, event->crtc, &geom);
 	return;
@@ -400,8 +408,15 @@ void xrandr_update(struct xrandr *xrr)
 
 		geom.x = crtc_info->x;
 		geom.y = crtc_info->y;
-		geom.w = crtc_info->width;
-		geom.h = crtc_info->height;
+
+		if (crtc_info->rotation == RR_Rotate_90 ||
+		    crtc_info->rotation == RR_Rotate_270) {
+			geom.w = crtc_info->height;
+			geom.h = crtc_info->width;
+		} else {
+			geom.w = crtc_info->width;
+			geom.h = crtc_info->height;
+		}
 
 #if MWM_DEBUG_XRANDR
 		fprintf(stderr, "New CRTC: %lx [%dx%d @ %d,%d]\n",
