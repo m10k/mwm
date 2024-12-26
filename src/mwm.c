@@ -1724,17 +1724,17 @@ int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
 	return(0);
 }
 
-int mwm_get_atom(struct mwm *mwm, const char *name, long *dst)
+int mwm_get_atom_by_name(struct mwm *mwm, const char *name, Atom *dst)
 {
-	long atom;
+	Atom atom;
 
-	if(!mwm || !name || !dst) {
-		return(-EINVAL);
+	if (!mwm || !name || !dst) {
+		return -EINVAL;
 	}
 
 	/* FIXME: Cache the result */
 	atom = XInternAtom(mwm->display, name, False);
 
 	*dst = atom;
-	return(0);
+	return 0;
 }

@@ -403,7 +403,7 @@ int client_set_state(struct client *client, const long state)
 	data[0] = state;
 	data[1] = None;
 
-	if(mwm_get_atom(__mwm, "WM_STATE", &wm_state) < 0) {
+	if(mwm_get_atom_by_name(__mwm, "WM_STATE", (Atom*)&wm_state) < 0) {
 		return(-EIO);
 	}
 

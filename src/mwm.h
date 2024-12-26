@@ -80,6 +80,6 @@ unsigned long mwm_get_color(struct mwm *mwm, mwm_palette_t palette, mwm_color_t 
 int mwm_get_status(struct mwm *mwm, char *buffer, const size_t buffer_size);
 int mwm_grab_keys(struct mwm *mwm);
 int mwm_cmd(struct mwm *mwm, mwm_cmd_t, void *data);
-int mwm_get_atom(struct mwm *mwm, const char *name, long *dst);
+int mwm_get_atom_by_name(struct mwm *mwm, const char *name, Atom *dst);
 
 #endif /* MWM_H */
