@@ -1637,9 +1637,14 @@ int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char *buffe
 {
 	XTextProperty property;
 	int len;
+	Atom UTF8_STRING;
 
-	if(!mwm || !buffer || buffer_size == 0) {
-		return(-EINVAL);
+	if (!mwm || !buffer || buffer_size == 0) {
+		return -EINVAL;
+	}
+
+	if (mwm_get_atom(mwm, MWM_ATOM_UTF8, &UTF8_STRING) < 0) {
+		return -EIO;
 	}
 
 	XGetTextProperty(mwm->display, window, &property, atom);
@@ -1648,7 +1653,8 @@ int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char *buffe
 		return(-ENOENT);
 	}
 
-	if(property.encoding == XA_STRING) {
+	if(property.encoding == XA_STRING ||
+	   property.encoding == UTF8_STRING) {
 		len = snprintf(buffer, buffer_size, "%s", (char*)property.value);
 	} else {
 		len = -ENOSYS;
