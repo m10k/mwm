@@ -46,4 +46,6 @@ int client_restore_pointer(struct client *client);
 int client_set_state(struct client *client, long state);
 void client_property_notify(struct client *client, XPropertyEvent *event);
 
+const char* client_get_hint(struct client *client);
+
 #endif /* MWM_CLIENT_H */

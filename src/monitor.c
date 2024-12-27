@@ -133,8 +133,11 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		struct geom client_pos;
 		unsigned long fg_color;
 		unsigned long bg_color;
-		char status[512];
+		const char *hint;
 
+		if (!(hint = client_get_hint(focused))) {
+			hint = "";
+		}
 		client_get_geometry(focused, &focus_pos);
 		memcpy(&client_pos, &focus_pos, sizeof(client_pos));
 
@@ -158,19 +161,14 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		XDrawRectangle(display, indicator->window, indicator->gfx_context,
 			       focus_pos.x, focus_pos.y, focus_pos.w, focus_pos.h);
 
-		snprintf(status, sizeof(status), "W=0x%lx %dx%d+%d+%d",
-			 client_get_window(focused),
-			 client_pos.w, client_pos.h,
-			 client_pos.x, client_pos.y);
-
 		if(indicator->orientation == HINDICATOR) {
 			mwm_render_text(monitor->mwm, indicator->xft_context,
-					palette, status,
+			                palette, hint,
 					focus_pos.x + font_padding,
 					focus_pos.y + font_padding);
 		} else {
 			mwm_render_text_vertical(monitor->mwm, indicator->xft_context,
-						 palette, status,
+			                         palette, hint,
 						 focus_pos.x + font_padding,
 						 focus_pos.y + font_padding);
 		}
