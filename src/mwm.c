@@ -35,6 +35,12 @@ typedef void (_mwm_xhandler_t)(struct mwm*, XEvent*);
 #define FIND_WORKSPACE_BY_VIEWER ((int(*)(void*, void*))_cmp_workspace_viewer)
 #define FIND_WORKSPACE_BY_NUMBER ((int(*)(void*, void*))_cmp_workspace_number)
 
+static const char *_mwm_atom_names[] = {
+	[MWM_ATOM_HINT] = "MWM_HINT",
+	[MWM_ATOM_UTF8] = "UTF8_STRING",
+	[MWM_ATOM_MAX] = NULL
+};
+
 struct palette {
 	unsigned long color[MWM_COLOR_MAX];
 	XftColor xcolor[MWM_COLOR_MAX];
@@ -45,6 +51,7 @@ struct mwm {
 	int screen;
 	Window root;
 	struct geom root_geom;
+	Atom atoms[MWM_ATOM_MAX];
 
 	int running;
 	int needs_redraw;
@@ -1054,6 +1061,7 @@ int mwm_init(struct mwm *mwm)
 	PangoFontDescription *fontdesc;
 	PangoFontMetrics *fontmetrics;
 	int err;
+	int i;
 
 	if(!mwm) {
 		return(-EINVAL);
@@ -1073,6 +1081,10 @@ int mwm_init(struct mwm *mwm)
 
 	if(!mwm->xerror_default_handler) {
 		return(-EIO);
+	}
+
+	for (i = 0; i < (sizeof(mwm->atoms) / sizeof(mwm->atoms[0])); i++) {
+		mwm_get_atom_by_name(mwm, _mwm_atom_names[i], &mwm->atoms[i]);
 	}
 
 	if ((err = xrandr_new(&mwm->xrandr, mwm->display, mwm->root)) < 0) {
@@ -1736,5 +1748,19 @@ int mwm_get_atom_by_name(struct mwm *mwm, const char *name, Atom *dst)
 	atom = XInternAtom(mwm->display, name, False);
 
 	*dst = atom;
+	return 0;
+}
+
+int mwm_get_atom(struct mwm *mwm, mwm_atom_t atom_id, Atom *dst)
+{
+	if (!mwm || !dst) {
+		return -EINVAL;
+	}
+
+	if (atom_id < 0 || atom_id >= MWM_ATOM_MAX) {
+		return -EBADSLT;
+	}
+
+	*dst = mwm->atoms[atom_id];
 	return 0;
 }
