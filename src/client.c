@@ -20,6 +20,8 @@ struct client {
 	int border_width;
 	client_flags_t flags;
 	struct workspace *workspace;
+
+	char *hint;
 };
 
 extern struct mwm *__mwm;
@@ -431,6 +433,37 @@ static void _client_update_wm_hints(struct client *client)
 	}
 }
 
+static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
+{
+	char *hint;
+	Atom MWM_HINT;
+
+	hint = NULL;
+
+	if (mwm_get_atom(__mwm, MWM_ATOM_HINT, &MWM_HINT) < 0) {
+		return -EIO;
+	}
+
+	if (event->atom != MWM_HINT) {
+		return 0;
+	}
+
+	if (mwm_get_text_property(__mwm, client->window, MWM_HINT,
+	                          &hint) < 0) {
+		return -EIO;
+	}
+
+	free(client->hint);
+	client->hint = hint;
+	client_needs_redraw(client);
+
+	if (client->workspace) {
+		workspace_needs_redraw(client->workspace);
+	}
+
+	return 0;
+}
+
 void client_property_notify(struct client *client, XPropertyEvent *event)
 {
 	switch (event->atom) {
@@ -449,6 +482,12 @@ void client_property_notify(struct client *client, XPropertyEvent *event)
 		break;
 
 	default:
+		_client_update_mwm_hint(client, event);
 		break;
 	}
+}
+
+const char* client_get_hint(struct client *client)
+{
+	return client->hint;
 }
