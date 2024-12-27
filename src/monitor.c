@@ -514,15 +514,15 @@ static int _redraw_statusbar(struct monitor *monitor)
 	int status_x;
 	int status_width;
 	int workspace_button_width;
-	char status[512];
+	char *status;
 
 	if(!monitor) {
 		return(-EINVAL);
 	}
 
+	status = NULL;
 	display = mwm_get_display(monitor->mwm);
 	focused_monitor = mwm_get_focused_monitor(monitor->mwm);
-	status[0] = 0;
 
 	/* draw the workspace buttons */
 	dwdata.monitor = monitor;
@@ -537,10 +537,10 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 	workspace_button_width = dwdata.i * (dwdata.text_width + 2 * dwdata.text_padding);
 
-	mwm_get_status(monitor->mwm, status, sizeof(status));
+	mwm_get_status(monitor->mwm, &status);
 
 	/* right-align the status */
-	status_width = mwm_get_text_width(monitor->mwm, status) +
+	status_width = mwm_get_text_width(monitor->mwm, status ? status :  "") +
 		dwdata.text_padding * 2;
 	status_x = monitor->geom.w - status_width;
 
@@ -565,11 +565,12 @@ static int _redraw_statusbar(struct monitor *monitor)
 		       monitor->gfx_context, status_x, 0,
 		       status_width, STATUSBAR_HEIGHT);
 
-	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status,
+	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status ? status : "",
 			status_x + dwdata.text_padding, dwdata.text_padding);
 
 	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
 		  0, 0, monitor->geom.w, STATUSBAR_HEIGHT, 0, 0);
+	free(status);
 
 	return(0);
 }

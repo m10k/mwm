@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L /* for strdup() */
+
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -1633,13 +1635,13 @@ unsigned long mwm_get_color(struct mwm *mwm, mwm_palette_t palette, mwm_color_t 
 	return(mwm->palette[palette].color[color]);
 }
 
-int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char *buffer, size_t buffer_size)
+int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char **dst)
 {
 	XTextProperty property;
 	int len;
 	Atom UTF8_STRING;
 
-	if (!mwm || !buffer || buffer_size == 0) {
+	if (!mwm || !dst) {
 		return -EINVAL;
 	}
 
@@ -1655,7 +1657,14 @@ int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char *buffe
 
 	if(property.encoding == XA_STRING ||
 	   property.encoding == UTF8_STRING) {
-		len = snprintf(buffer, buffer_size, "%s", (char*)property.value);
+		char *dup;
+
+		if (!(dup = strdup((char*)property.value))) {
+			len = -ENOMEM;
+		} else {
+			*dst = dup;
+			len = strlen(dup);
+		}
 	} else {
 		len = -ENOSYS;
 	}
@@ -1664,17 +1673,21 @@ int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char *buffe
 	return(len);
 }
 
-int mwm_get_status(struct mwm *mwm, char *buffer, const size_t buffer_size)
+int mwm_get_status(struct mwm *mwm, char **buffer)
 {
+	char *status;
 	int len;
 
-	len = mwm_get_text_property(mwm, mwm->root, XA_WM_NAME, buffer, buffer_size);
+	status = NULL;
 
-	if(len < 0) {
-		return(snprintf(buffer, buffer_size, "mwm-0.1"));
+	if ((len = mwm_get_text_property(mwm, mwm->root, XA_WM_NAME, &status)) < 0) {
+		if (!(status = strdup("mwm-0.1"))) {
+			return -ENOMEM;
+		}
 	}
 
-	return(len);
+	*buffer = status;
+	return 0;
 }
 
 int mwm_grab_keys(struct mwm *mwm)
