@@ -74,11 +74,13 @@ XftDraw* mwm_create_xft_context(struct mwm *mwm, Drawable drawable);
 Drawable mwm_create_pixmap(struct mwm *mwm, Window window, const int width, const int height);
 void mwm_free_pixmap(struct mwm *mwm, Drawable drawable);
 int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
-		    mwm_palette_t palette, const char *text,
-		    const int x, const int y);
+                    mwm_palette_t palette, const char *text,
+                    const int x, const int y,
+                    const int w, const int h);
 int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
-			     mwm_palette_t palette, const char *text,
-			     const int x, const int y);
+                             mwm_palette_t palette, const char *text,
+                             const int x, const int y,
+                             const int w, const int h);
 int mwm_get_font_height(struct mwm *mwm);
 int mwm_get_text_width(struct mwm *mwm, const char *text);
 int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char **dst);

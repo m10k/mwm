@@ -1177,8 +1177,9 @@ int mwm_init(struct mwm *mwm)
 }
 
 int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
-		    mwm_palette_t palette, const char *text,
-		    const int x, const int y)
+                    mwm_palette_t palette, const char *text,
+                    const int x, const int y,
+                    const int w, const int h)
 {
 	XftColor *color;
 
@@ -1189,6 +1190,10 @@ int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
 	color = &mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
 
 	pango_layout_set_attributes(mwm->font.layout, NULL);
+	pango_layout_set_width(mwm->font.layout, w * PANGO_SCALE);
+	pango_layout_set_height(mwm->font.layout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(mwm->font.layout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(mwm->font.layout, PANGO_WRAP_CHAR);
 
 	pango_layout_set_markup(mwm->font.layout, text, -1);
 	pango_xft_render_layout(drawable, color,
@@ -1200,8 +1205,9 @@ int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
 }
 
 int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
-			     mwm_palette_t palette, const char *text,
-			     const int x, const int y)
+                             mwm_palette_t palette, const char *text,
+                             const int x, const int y,
+                             const int w, const int h)
 {
 	PangoMatrix matrix = PANGO_MATRIX_INIT;
 	PangoContext *context;
@@ -1221,6 +1227,10 @@ int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
 	pango_context_set_base_gravity(context, PANGO_GRAVITY_EAST);
 
 	pango_layout_set_attributes(mwm->font.vlayout, NULL);
+	pango_layout_set_width(mwm->font.vlayout, w * PANGO_SCALE);
+	pango_layout_set_height(mwm->font.vlayout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(mwm->font.vlayout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(mwm->font.vlayout, PANGO_WRAP_CHAR);
 	pango_layout_set_markup(mwm->font.vlayout, text, -1);
 	pango_layout_get_extents(mwm->font.vlayout, NULL, &extents);
 
@@ -1624,6 +1634,8 @@ int mwm_get_text_width(struct mwm *mwm, const char *text)
 	PangoRectangle extents;
 
 	pango_layout_set_attributes(mwm->font.layout, NULL);
+	pango_layout_set_width(mwm->font.layout, -1);
+	pango_layout_set_height(mwm->font.layout, -1);
 	pango_layout_set_markup(mwm->font.layout, text, -1);
 	pango_layout_get_extents(mwm->font.layout, 0, &extents);
 

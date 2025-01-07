@@ -165,12 +165,16 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 			mwm_render_text(monitor->mwm, indicator->xft_context,
 			                palette, hint,
 					focus_pos.x + font_padding,
-					focus_pos.y + font_padding);
+			                focus_pos.y + font_padding,
+			                focus_pos.w - (2 * font_padding),
+			                focus_pos.h - (2 * font_padding));
 		} else {
 			mwm_render_text_vertical(monitor->mwm, indicator->xft_context,
 			                         palette, hint,
 						 focus_pos.x + font_padding,
-						 focus_pos.y + font_padding);
+			                         focus_pos.y + font_padding,
+			                         focus_pos.w - (2 * font_padding),
+			                         focus_pos.h - (2 * font_padding));
 		}
 	}
 
@@ -489,7 +493,8 @@ static int _draw_workspace_button(struct mwm *mwm, struct workspace *workspace, 
 		       button_width, STATUSBAR_HEIGHT);
 
 	mwm_render_text(mwm, dwdata->monitor->xft_context, dwdata->palette,
-			_workspace_names[dwdata->i], x + dwdata->text_padding, dwdata->text_padding);
+	                _workspace_names[dwdata->i], x + dwdata->text_padding, dwdata->text_padding,
+	                button_width, button_width);
 
 	/* A workspace necessarily has a focused client if it isn't empty */
 	if(workspace_get_focused_client(workspace)) {
@@ -511,6 +516,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	Display *display;
 	int status_x;
 	int status_width;
+	int status_width_max;
 	int workspace_button_width;
 	char *status;
 
@@ -541,6 +547,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	status_width = mwm_get_text_width(monitor->mwm, status ? status :  "") +
 		dwdata.text_padding * 2;
 	status_x = monitor->geom.w - status_width;
+	status_width_max = monitor->geom.w - workspace_button_width;
 
 	/*
 	 * If there isn't enough space, left-align. I'd prefer part of the status to be cut
@@ -564,7 +571,8 @@ static int _redraw_statusbar(struct monitor *monitor)
 		       status_width, STATUSBAR_HEIGHT);
 
 	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status ? status : "",
-			status_x + dwdata.text_padding, dwdata.text_padding);
+	                status_x + dwdata.text_padding, dwdata.text_padding,
+	                status_width_max, STATUSBAR_HEIGHT);
 
 	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
 		  0, 0, monitor->geom.w, STATUSBAR_HEIGHT, 0, 0);
