@@ -1746,7 +1746,7 @@ int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
 	};
 	int nameidx;
 
-	nameidx = sizeof(cmd_names) / sizeof(cmd_names[0]);
+	nameidx = sizeof(cmd_names) / sizeof(cmd_names[0]) - 1;
 	if(cmd >= 0 && cmd < nameidx) {
 		nameidx = cmd;
 	}
