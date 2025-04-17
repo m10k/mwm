@@ -300,32 +300,9 @@ int workspace_arrange(struct workspace *workspace,
 	return(0);
 }
 
-int _increase_if_tiled(struct workspace *workspace, struct client *client, void *data)
+int workspace_count_clients(struct workspace *workspace)
 {
-	int *count;
-
-	if(!workspace || !client || !data) {
-		return(-EINVAL);
-	}
-
-	count = (int*)data;
-
-	if(client_is_tiled(client)) {
-		(*count)++;
-	}
-
-	return(0);
-}
-
-int workspace_count_tiled_clients(struct workspace *workspace)
-{
-	int count;
-
-	count = 0;
-
-	workspace_foreach_client(workspace, _increase_if_tiled, &count);
-
-	return(count);
+	return loop_get_length(&workspace->clients);
 }
 
 int workspace_shift_focus(struct workspace *workspace, int dir)

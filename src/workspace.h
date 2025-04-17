@@ -29,7 +29,7 @@ int workspace_arrange(struct workspace *workspace,
 		      int (*func)(struct workspace*, struct client*, int, void*),
 		      void *data);
 
-int workspace_count_tiled_clients(struct workspace *workspace);
+int workspace_count_clients(struct workspace *workspace);
 int workspace_foreach_client(struct workspace *workspace,
 			     int (*func)(struct workspace*, struct client*, void*),
 			     void *data);

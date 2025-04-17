@@ -113,7 +113,7 @@ int layout_arrange(struct layout *layout,
 	}
 
 	args.layout = layout;
-	args.total_clients = workspace_count_tiled_clients(workspace);
+	args.total_clients = workspace_count_clients(workspace);
 	args.arranged_clients = 0;
 	memcpy(&args.usable_area, usable_area, sizeof(*usable_area));
 

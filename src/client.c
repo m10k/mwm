@@ -199,20 +199,6 @@ int client_is_visible(struct client *client)
 	return(workspace_get_viewer(workspace) != NULL);
 }
 
-int client_is_tiled(struct client *client)
-{
-	if(!client) {
-		return(FALSE);
-	}
-
-	if(client->flags & (CLIENT_FULLSCREEN |
-			    CLIENT_FIXED)) {
-		return(FALSE);
-	}
-
-	return(TRUE);
-}
-
 int client_show(struct client *client)
 {
 #if MWM_DEBUG
