@@ -206,34 +206,7 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 		XConfigureWindow(mwm->display, configure_request->window,
 				 value_mask, &changes);
 	} else {
-		struct geom requested_geom;
-
-		/*
-		 * We have a client for that window. Let's see what it is
-		 * that the client requested, and let client_change_geometry()
-		 * do the deciding.
-		 */
-
-		if(configure_request->value_mask & CWBorderWidth) {
-			client_set_border(client, configure_request->border_width);
-		}
-
-		client_get_geometry(client, &requested_geom);
-
-		if(configure_request->value_mask & CWX) {
-			requested_geom.x = configure_request->x;
-		}
-		if(configure_request->value_mask & CWY) {
-			requested_geom.y = configure_request->y;
-		}
-		if(configure_request->value_mask & CWWidth) {
-			requested_geom.w = configure_request->width;
-		}
-		if(configure_request->value_mask & CWHeight) {
-			requested_geom.h = configure_request->height;
-		}
-
-		client_change_geometry(client, &requested_geom);
+		/* Clients don't get to choose their geometry */
 		client_set_state(client, NormalState);
 	}
 

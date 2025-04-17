@@ -171,23 +171,6 @@ struct monitor* client_get_viewer(struct client *client)
 	return(NULL);
 }
 
-int client_is_floating(struct client *client)
-{
-	struct monitor *viewer;
-
-	if(!client) {
-		return(FALSE);
-	}
-
-	if(client->flags & CLIENT_FLOATING) {
-		return(TRUE);
-	}
-
-	viewer = client_get_viewer(client);
-
-	return(viewer ? monitor_is_floating(viewer) : FALSE);
-}
-
 int client_set_workspace(struct client *client, struct workspace *workspace)
 {
 	if(!client || !workspace) {
@@ -222,27 +205,12 @@ int client_is_tiled(struct client *client)
 		return(FALSE);
 	}
 
-	if(client->flags & (CLIENT_FLOATING |
-			    CLIENT_FULLSCREEN |
+	if(client->flags & (CLIENT_FULLSCREEN |
 			    CLIENT_FIXED)) {
 		return(FALSE);
 	}
 
 	return(TRUE);
-}
-
-int client_change_geometry(struct client *client, struct geom *geom)
-{
-	if(!client || !geom) {
-		return(-EINVAL);
-	}
-
-	/* If the client is floating, we'll allow it */
-	if(client_is_floating(client)) {
-		client_set_geometry(client, geom);
-	}
-
-	return(0);
 }
 
 int client_show(struct client *client)
