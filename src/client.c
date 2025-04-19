@@ -34,13 +34,9 @@ int client_new(Window window, XWindowAttributes *attrs, struct client **client)
 		return(-EINVAL);
 	}
 
-	cl = malloc(sizeof(*cl));
-
-	if(!cl) {
-		return(-ENOMEM);
+	if (!(cl = calloc(1, sizeof(*cl)))) {
+		return -ENOMEM;
 	}
-
-	memset(cl, 0, sizeof(*cl));
 
 	cl->window = window;
 	cl->pointer.x = -1;

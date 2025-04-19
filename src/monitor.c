@@ -219,13 +219,9 @@ int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
 		return(-EINVAL);
 	}
 
-	mon = malloc(sizeof(*mon));
-
-	if(!mon) {
-		return(-ENOMEM);
+	if (!(mon = calloc(1, sizeof(*mon)))) {
+		return -ENOMEM;
 	}
-
-	memset(mon, 0, sizeof(*mon));
 
 	mon->mwm = mwm;
 	mon->id = id;

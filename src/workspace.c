@@ -27,10 +27,8 @@ int workspace_new(const int number, struct workspace **workspace)
 		return(-EINVAL);
 	}
 
-	wspace = malloc(sizeof(*wspace));
-
-	if(!wspace) {
-		return(-ENOMEM);
+	if (!(wspace = calloc(1, sizeof(*wspace)))) {
+		return -ENOMEM;
 	}
 
 	wspace->number = number;

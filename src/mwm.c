@@ -566,13 +566,9 @@ int mwm_new(struct mwm **dst)
 		return(-EINVAL);
 	}
 
-	mwm = malloc(sizeof(*mwm));
-
-	if(!mwm) {
-		return(-ENOMEM);
+	if (!(mwm = calloc(1, sizeof(*mwm)))) {
+		return -ENOMEM;
 	}
-
-	memset(mwm, 0, sizeof(*mwm));
 
 	for(i = 0; i < 12; i++) {
 		struct workspace *workspace;
