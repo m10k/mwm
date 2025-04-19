@@ -61,6 +61,9 @@ struct mwm {
 	struct loop *workspaces;
 	struct monitor *current_monitor;
 	struct client *focused_client;
+
+	struct monitor *next_monitor;
+
 	struct xrandr *xrandr;
 
 	_mwm_xhandler_t *xhandler[LASTEvent];
@@ -1240,6 +1243,14 @@ int mwm_run(struct mwm *mwm)
 			}
 		} while(XEventsQueued(mwm->display, QueuedAfterFlush) > 0);
 
+		if (mwm->next_monitor && mwm->next_monitor != mwm->current_monitor) {
+			monitor_needs_redraw(mwm->current_monitor);
+			monitor_needs_redraw(mwm->next_monitor);
+
+			mwm->current_monitor = mwm->next_monitor;
+			mwm->next_monitor = NULL;
+		}
+
 		if(mwm->needs_redraw) {
 			mwm_redraw(mwm);
 		}
@@ -1328,22 +1339,16 @@ int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon)
 
 int mwm_focus_monitor(struct mwm *mwm, struct monitor *monitor)
 {
-	if(!mwm || !monitor) {
+	if (!mwm || !monitor) {
 		return(-EINVAL);
 	}
 
-	if(mwm->current_monitor != monitor) {
 #if MWM_DEBUG
-		fprintf(stderr, "New current monitor: %p\n", (void*)monitor);
+		fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
 #endif /* MWM_DEBUG */
+	mwm->next_monitor = monitor;
 
-		monitor_needs_redraw(mwm->current_monitor);
-		monitor_needs_redraw(monitor);
-	}
-
-	mwm->current_monitor = monitor;
-
-	return(0);
+	return 0;
 }
 
 struct monitor* mwm_get_focused_monitor(struct mwm *mwm)
