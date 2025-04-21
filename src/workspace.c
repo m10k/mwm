@@ -267,37 +267,6 @@ int workspace_needs_redraw(struct workspace *workspace)
 	return(0);
 }
 
-int workspace_arrange(struct workspace *workspace,
-		      int (*arrange)(struct workspace*, struct client*, int, void*),
-		      void *data)
-{
-	int unarranged_clients;
-	loop_iter_t first;
-	loop_iter_t cur;
-
-	unarranged_clients = loop_get_length(&workspace->clients);
-	first = loop_get_iter(&workspace->clients);
-
-	if(!first) {
-		return(0);
-	}
-
-	cur = first;
-
-	do {
-		struct client *client;
-
-		client = (struct client*)loop_iter_get_data(cur);
-
-		arrange(workspace, client, unarranged_clients, data);
-
-		unarranged_clients--;
-		loop_iter_inc(cur);
-	} while(cur != first);
-
-	return(0);
-}
-
 int workspace_count_clients(struct workspace *workspace)
 {
 	return loop_get_length(&workspace->clients);
