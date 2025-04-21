@@ -17,7 +17,6 @@ struct client {
 	struct geom pointer;
 	int needs_redraw;
 
-	int border_width;
 	client_flags_t flags;
 	struct workspace *workspace;
 
@@ -115,7 +114,7 @@ int client_configure(struct client *client)
 	configure_event.y = client->geom.y;
 	configure_event.width = client->geom.w;
 	configure_event.height = client->geom.h;
-	configure_event.border_width = client->border_width;
+	configure_event.border_width = 0;
 	configure_event.above = None;
 	configure_event.override_redirect = False;
 
@@ -145,17 +144,6 @@ int client_redraw(struct client *client)
 	client->needs_redraw = 0;
 
 	return(0);
-}
-
-int client_get_border(struct client *client)
-{
-	return(client->border_width);
-}
-
-void client_set_border(struct client *client, int border)
-{
-	client->border_width = border;
-	return;
 }
 
 struct monitor* client_get_viewer(struct client *client)

@@ -17,9 +17,6 @@ struct geom;
 int client_new(Window window, XWindowAttributes *attrs, struct client **client);
 int client_free(struct client **client);
 
-int client_get_border(struct client *client);
-void client_set_border(struct client *client, int border);
-
 Window client_get_window(struct client *client);
 int client_owns_window(struct client *client, Window *window);
 int client_configure(struct client *client);
