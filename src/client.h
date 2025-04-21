@@ -18,7 +18,6 @@ int client_new(Window window, XWindowAttributes *attrs, struct client **client);
 int client_free(struct client **client);
 
 Window client_get_window(struct client *client);
-int client_owns_window(struct client *client, Window *window);
 int client_configure(struct client *client);
 int client_redraw(struct client *client);
 int client_is_visible(struct client *client);
