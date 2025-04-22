@@ -32,8 +32,6 @@ struct client* monitor_get_focused_client(struct monitor *monitor);
 int monitor_arrange_clients(struct monitor *monitor);
 int monitor_needs_redraw(struct monitor *monitor);
 int monitor_redraw(struct monitor *monitor);
-int monitor_is_floating(struct monitor *monitor);
-int monitor_is_dirty(struct monitor *monitor);
 int monitor_is_focused(struct monitor *monitor);
 
 #endif /* MONITOR_H */

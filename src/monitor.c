@@ -612,20 +612,6 @@ struct layout* monitor_get_layout(struct monitor *monitor)
 	return(monitor->layout);
 }
 
-int monitor_is_floating(struct monitor *monitor)
-{
-	if(!monitor) {
-		return(FALSE);
-	}
-
-	return(monitor->layout == NULL);
-}
-
-int monitor_is_dirty(struct monitor *monitor)
-{
-	return(monitor->needs_redraw);
-}
-
 int monitor_is_focused(struct monitor *monitor)
 {
 	return(mwm_get_focused_monitor(monitor->mwm) == monitor);
