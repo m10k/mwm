@@ -18,7 +18,6 @@ int client_new(Window window, XWindowAttributes *attrs, struct client **client);
 int client_free(struct client **client);
 
 Window client_get_window(struct client *client);
-int client_configure(struct client *client);
 int client_redraw(struct client *client);
 int client_is_visible(struct client *client);
 int client_get_geometry(struct client *client, struct geom *geom);
@@ -26,7 +25,6 @@ int client_set_geometry(struct client *client, struct geom *geom);
 
 int client_set_workspace(struct client *client, struct workspace *workspace);
 struct workspace* client_get_workspace(struct client *client);
-struct monitor* client_get_viewer(struct client *client);
 int client_show(struct client *client);
 
 int client_needs_redraw(struct client *client);

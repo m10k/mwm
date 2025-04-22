@@ -97,35 +97,6 @@ Window client_get_window(struct client *client)
 	return(client->window);
 }
 
-int client_configure(struct client *client)
-{
-	XConfigureEvent configure_event;
-	Display *display;
-	Window window;
-
-	display = mwm_get_display(__mwm);
-	window = client->window;
-
-	configure_event.type = ConfigureNotify;
-	configure_event.display = display;
-	configure_event.event = window;
-	configure_event.window = window;
-	configure_event.x = client->geom.x;
-	configure_event.y = client->geom.y;
-	configure_event.width = client->geom.w;
-	configure_event.height = client->geom.h;
-	configure_event.border_width = 0;
-	configure_event.above = None;
-	configure_event.override_redirect = False;
-
-	if(!XSendEvent(display, window, False, StructureNotifyMask,
-		       (XEvent*)&configure_event)) {
-		return(-EIO);
-	}
-
-	return(0);
-}
-
 int client_redraw(struct client *client)
 {
 	if(!client) {
@@ -144,15 +115,6 @@ int client_redraw(struct client *client)
 	client->needs_redraw = 0;
 
 	return(0);
-}
-
-struct monitor* client_get_viewer(struct client *client)
-{
-	if(client->workspace) {
-		return(workspace_get_viewer(client->workspace));
-	}
-
-	return(NULL);
 }
 
 int client_set_workspace(struct client *client, struct workspace *workspace)
