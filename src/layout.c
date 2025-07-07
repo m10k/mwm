@@ -28,6 +28,10 @@ static int bookstack(struct client *client, struct geom *unallocated,
 		     int arranged_clients, int total_clients);
 static int sink(struct client *client, struct geom *unallocated,
 		int arranged_clients, int total_clients);
+static int geom_bookshelf(struct client *client, struct geom *unallocated,
+                          int arranged_clients, int total_clients);
+static int geom_bookstack(struct client *client, struct geom *unallocated,
+                          int arranged_clients, int total_clients);
 
 static struct layout layout_bookshelf = {
 	.name = "縦",
@@ -47,10 +51,24 @@ static struct layout layout_sink = {
 	.orientation = LAYOUT_HORIZONTAL | LAYOUT_VERTICAL
 };
 
+static struct layout layout_geom_bookshelf = {
+	.name = "幾縦",
+	.arrange = geom_bookshelf,
+	.orientation = LAYOUT_HORIZONTAL
+};
+
+static struct layout layout_geom_bookstack = {
+	.name = "幾横",
+	.arrange = geom_bookstack,
+	.orientation = LAYOUT_VERTICAL
+};
+
 struct layout *layouts[] = {
 	&layout_bookshelf,
 	&layout_bookstack,
 	&layout_sink,
+	&layout_geom_bookshelf,
+	&layout_geom_bookstack,
 	NULL
 };
 
@@ -222,6 +240,48 @@ static int sink(struct client *client, struct geom *unallocated,
 #undef MIN_HEIGHT
 
 	return client_set_geometry(client, &geom);
+}
+
+static int geom_bookshelf(struct client *client, struct geom *unallocated,
+                          int arranged_clients, int total_clients)
+{
+	struct geom geom;
+	int w;
+	int last_client;
+
+	last_client = arranged_clients + 1 == total_clients;
+	w = last_client ? unallocated->w : unallocated->w / 2;
+
+	geom.x = unallocated->x + PADDING;
+	geom.y = unallocated->y;
+	geom.w = w - PADDING - (last_client ? PADDING : 0);
+	geom.h = unallocated->h - PADDING;
+
+	unallocated->x += w;
+	unallocated->w -= w;
+
+	return(client_set_geometry(client, &geom));
+}
+
+static int geom_bookstack(struct client *client, struct geom *unallocated,
+                          int arranged_clients, int total_clients)
+{
+	struct geom geom;
+	int h;
+	int last_client;
+
+	last_client = arranged_clients + 1 == total_clients;
+	h = last_client ? unallocated->h : unallocated->h / 2;
+
+	geom.x = unallocated->x + PADDING;
+	geom.y = unallocated->y + PADDING;
+	geom.w = unallocated->w - PADDING;
+	geom.h = h - PADDING - (last_client ? PADDING : 0);
+
+	unallocated->y += h;
+	unallocated->h -= h;
+
+	return(client_set_geometry(client, &geom));
 }
 
 int _arrange_workspace(struct workspace *workspace, struct client *client,
