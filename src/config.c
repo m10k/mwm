@@ -72,6 +72,7 @@ struct key_binding config_keybindings[] = {
 	{ MODKEY | ShiftMask,   XK_asciicircum, MWM_CMD_MOVE_TO_WORKSPACE,   (void*)11 },
 	{ MODKEY,               XK_t,           MWM_CMD_SET_LAYOUT,          (void*)0 },
 	{ MODKEY,               XK_y,           MWM_CMD_SET_LAYOUT,          (void*)1 },
+	{ MODKEY,               XK_r,           MWM_CMD_SET_LAYOUT,          (void*)2 },
 
 	{ MODKEY,               XK_a,           MWM_CMD_SHIFT_FOCUS,         (void*)-1 },
 	{ MODKEY,               XK_d,           MWM_CMD_SHIFT_FOCUS,         (void*)+1 },
