@@ -47,7 +47,7 @@ struct monitor {
 extern struct layout *layouts[];
 
 static const char *_workspace_names[] = {
-	"い", "ろ", "は", "に", "ほ", "へ", "と", "ち", "り", "ぬ", "る", "を"
+	"１", "２", "３", "４", "５", "６", "７", "８", "９", "０", "−", "＾"
 };
 
 static void _indicator_update_window(struct indicator *indicator, struct monitor *monitor)
