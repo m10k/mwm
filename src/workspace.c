@@ -187,65 +187,45 @@ struct client* workspace_get_focused_client(struct workspace *workspace)
 	return(workspace->focused);
 }
 
+struct workspace_foreach_client_args {
+	int (*func)(struct workspace*, struct client *, void*);
+	struct workspace *workspace;
+	void *data;
+};
+
+static int _workspace_foreach_client_call(struct client *client,
+                                          struct workspace_foreach_client_args *args)
+{
+	return args->func(args->workspace, client, args->data);
+}
+
 int workspace_foreach_client(struct workspace *workspace,
 			     int (*func)(struct workspace*, struct client*, void*),
 			     void *data)
 {
-	loop_iter_t first;
-	loop_iter_t cur;
+	struct workspace_foreach_client_args args;
 
-	if(!workspace || !func) {
-		return(-EINVAL);
+	if (!workspace || !func) {
+		return -EINVAL;
 	}
 
-	first = loop_get_iter(&workspace->clients);
+	args.func = func;
+	args.workspace = workspace;
+	args.data = data;
 
-	if(!first) {
-		return(0);
-	}
-
-	cur = first;
-
-	do {
-		struct client *client;
-
-		client = (struct client*)loop_iter_get_data(cur);
-
-		if(func(workspace, client, data) < 0) {
-			break;
-		}
-
-		cur = loop_iter_get_next(cur);
-	} while(cur != first);
-
-	return(0);
+	return loop_foreach_with_data(&workspace->clients,
+	                              (int(*)(void*, void*))_workspace_foreach_client_call,
+	                              &args);
 }
 
 int workspace_redraw(struct workspace *workspace)
 {
-	loop_iter_t first;
-	loop_iter_t cur;
-
 	if(!workspace) {
 		return(-EINVAL);
 	}
 
 	if(workspace->needs_redraw) {
-		first = loop_get_iter(&workspace->clients);
-
-		if(first) {
-			cur = first;
-
-			do {
-				struct client *client;
-
-				client = (struct client*)loop_iter_get_data(cur);
-				client_redraw(client);
-
-				cur = loop_iter_get_next(cur);
-			} while(cur != first);
-		}
-
+		loop_foreach(&workspace->clients, (void(*)(void*))client_redraw);
 		workspace->needs_redraw = 0;
 	}
 
