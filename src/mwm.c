@@ -1445,37 +1445,39 @@ struct client* mwm_get_focused_client(struct mwm *mwm)
 	return(monitor_get_focused_client(focused_monitor));
 }
 
+struct find_client_args {
+	int (*cmp)(struct client*, void*);
+	void *data;
+	struct client **dst;
+	int err;
+};
+
+int _find_client_in_workspace(struct workspace *workspace, struct find_client_args *args)
+{
+	args->err = workspace_find_client(workspace, args->cmp, args->data, args->dst);
+
+	/* abort the loop if the client was found */
+	return args->err == 0 ? -1 : 0;
+}
+
 int mwm_find_client(struct mwm *mwm, int(*cmp)(struct client*, void*),
 		    void *data, struct client **client)
 {
-	loop_iter_t first;
-	loop_iter_t cur;
+	struct find_client_args args;
+
+	args.cmp = cmp;
+	args.data = data;
+	args.dst = client;
+	args.err = -ENOENT;
 
 	if(!mwm) {
 		return(-EINVAL);
 	}
 
-       	first = loop_get_iter(&mwm->workspaces);
-	cur = first;
+	loop_foreach_with_data(&mwm->workspaces, (int(*)(void*, void*))_find_client_in_workspace,
+	                       &args);
 
-	do {
-		struct workspace *workspace;
-
-		workspace = (struct workspace*)loop_iter_get_data(cur);
-
-		if(!workspace) {
-			fprintf(stderr, "%s: Invalid workspace in loop\n", __func__);
-			continue;
-		}
-
-		if(workspace_find_client(workspace, cmp, data, client) == 0) {
-			return(0);
-		}
-
-		cur = loop_iter_get_next(cur);
-	} while(cur != first);
-
-	return(-ENOENT);
+	return args.err;
 }
 
 struct workspace *mwm_get_focused_workspace(struct mwm *mwm)
