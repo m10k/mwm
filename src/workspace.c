@@ -12,7 +12,11 @@ struct monitor;
 
 struct workspace {
 	struct loop *clients;
-	struct client *focused;
+	struct {
+		struct client *current;
+		struct client *next;
+		int changed;
+	} focus;
 	struct monitor *viewer;
 
 	int number;
@@ -65,18 +69,23 @@ int workspace_get_number(struct workspace *workspace)
 
 int workspace_attach_client(struct workspace *workspace, struct client *client)
 {
-	if(!workspace || !client) {
-		return(-EINVAL);
+	if (!workspace || !client) {
+		return -EINVAL;
 	}
 
-	if(loop_append(&workspace->clients, client) < 0) {
-		return(-ENOMEM);
+	if (loop_append(&workspace->clients, client) < 0) {
+		return -ENOMEM;
 	}
 
 	client_set_workspace(client, workspace);
 
-	if(!workspace_get_focused_client(workspace)) {
-		workspace_focus_client(workspace, client);
+
+	if (!workspace->focus.current) {
+		workspace->focus.next = client;
+		workspace->focus.changed = 1;
+#if MWM_DEBUG_VERBOSE
+		fprintf(stderr, "%s: %p->focus.next = %p\n", __func__, (void*)workspace, (void*)client);
+#endif /* MWM_DEBUG_VERBOSE */
 	}
 
 	workspace_needs_redraw(workspace);
@@ -87,35 +96,50 @@ int workspace_attach_client(struct workspace *workspace, struct client *client)
 
 int workspace_detach_client(struct workspace *workspace, struct client *client)
 {
-	struct client *next;
 	int err;
 
 #if MWM_DEBUG
 	printf("%s(%p, %p)\n", __func__, (void*)workspace, (void*)client);
 #endif /* MWM_DEBUG */
 
-	if(!workspace || !client) {
-		return(-EINVAL);
+	if (!workspace || !client) {
+		return -EINVAL;
 	}
 
-	/* before removing the client, we need to figure out who's getting the focus */
-	err = loop_get_next(&workspace->clients, client, (void**)&next);
+	if (workspace->focus.next == client) {
+		workspace->focus.next = NULL;
+	}
+	if (workspace->focus.current == client) {
+		struct client *next;
 
-	if(err < 0) {
-		/*
-		 * At the *very least* we should have gotten a pointer to client itself.
-		 * If we didn't even get that, client wasn't on this workspace and we've
-		 * encountered a bug.
-		 */
-		fprintf(stderr, "%s: BUG: Could not determine next client\n", __func__);
-		fprintf(stderr, "%s: loop_get_next: %s\n", __func__, strerror(-err));
+		/* before removing the client, we need to figure out who's getting the focus */
+		err = loop_get_next(&workspace->clients, client, (void**)&next);
 
-		return(err);
+		if(err < 0) {
+			/*
+			 * At the *very least* we should have gotten a pointer to client itself.
+			 * If we didn't even get that, client wasn't on this workspace and we've
+			 * encountered a bug.
+			 */
+			fprintf(stderr, "%s: BUG: Could not determine next client\n", __func__);
+			fprintf(stderr, "%s: loop_get_next: %s\n", __func__, strerror(-err));
+
+			return(err);
+		}
+
+		/* check if `client' was the only client on the workspace */
+		if (next == client) {
+			next = NULL;
+		}
+
+		workspace->focus.next = next;
+		workspace->focus.current = NULL;
+		workspace->focus.changed = 1;
 	}
 
 	err = loop_remove(&workspace->clients, client);
 
-	if(err < 0) {
+	if (err < 0) {
 		/*
 		 * If client wasn't on this workspace, the branch above should have been
 		 * visited. So if we get here, something even nastier is going on.
@@ -124,21 +148,12 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 			__func__, (void*)client);
 		fprintf(stderr, "%s: loop_remove: %s\n", __func__, strerror(-err));
 
-		return(err);
-	}
-
-	if(workspace_get_focused_client(workspace) == client) {
-		if(next == client) {
-			/* nothing left to focus on */
-			next = NULL;
-		}
-
-		workspace_focus_client(workspace, next);
+		return err;
 	}
 
 	workspace_needs_redraw(workspace);
 
-	return(0);
+	return 0;
 }
 
 int workspace_find_client(struct workspace *workspace,
@@ -170,21 +185,34 @@ struct monitor* workspace_get_viewer(struct workspace *workspace)
 
 int workspace_focus_client(struct workspace *workspace, struct client *client)
 {
-	if(!workspace) {
-		return(-EINVAL);
+	if (!workspace) {
+		return -EINVAL;
 	}
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr, "%s: %p ?= %p\n", __func__, (void*)workspace->focus.current,
+	        (void*)client);
+#endif /* MWM_DEBUG_VERBOSE */
 
-	if(workspace->focused != client) {
-		workspace->focused = client;
+	if (workspace->focus.current != client) {
+#if MWM_DEBUG_VERBOSE
+		fprintf(stderr, "%s: %p->focus.next = %p\n", __func__, (void*)workspace, (void*)client);
+#endif /* MWM_DEBUG_VERBOSE */
+		workspace->focus.next = client;
+		workspace->focus.changed = 1;
 		workspace_needs_redraw(workspace);
 	}
 
-	return(0);
+	return 0;
 }
 
 struct client* workspace_get_focused_client(struct workspace *workspace)
 {
-	return(workspace->focused);
+	return workspace->focus.current;
+}
+
+struct client* workspace_get_next_focused_client(struct workspace *workspace)
+{
+	return workspace->focus.next;
 }
 
 struct workspace_foreach_client_args {
@@ -218,11 +246,36 @@ int workspace_foreach_client(struct workspace *workspace,
 	                              &args);
 }
 
+int workspace_update_focus(struct workspace *workspace)
+{
+	if (!workspace) {
+		return -EINVAL;
+	}
+
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr,
+	        "%s(%p)\n"
+	        "  focus.current = %p\n"
+	        "  focus.next    = %p\n",
+	        __func__, (void*)workspace, workspace->focus.current, workspace->focus.next);
+#endif /* MWM_DEBUG_VERBOSE */
+
+	if (workspace->focus.next) {
+		workspace->focus.current = workspace->focus.next;
+		workspace->focus.next = NULL;
+	}
+
+	workspace->focus.changed = 0;
+	return 0;
+}
+
 int workspace_redraw(struct workspace *workspace)
 {
 	if(!workspace) {
 		return(-EINVAL);
 	}
+
+	workspace_update_focus(workspace);
 
 	if(workspace->needs_redraw) {
 		loop_foreach(&workspace->clients, (void(*)(void*))client_redraw);
@@ -254,33 +307,41 @@ int workspace_count_clients(struct workspace *workspace)
 
 int workspace_shift_focus(struct workspace *workspace, int dir)
 {
-	struct client *old_focus;
 	struct client *new_focus;
 
-	if(!workspace || dir == 0) {
-		return(-EINVAL);
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr, "%s(%p, %d)\n", __func__, (void*)workspace, dir);
+#endif /* MWM_DEBUG_VERBOSE */
+
+	if (!workspace || dir == 0) {
+		return -EINVAL;
 	}
 
-	if(dir > 0) {
-		if(loop_get_next(&workspace->clients, workspace->focused,
-				 (void**)&new_focus) < 0) {
-			return(-EFAULT);
+	new_focus = NULL;
+
+	if (dir > 0) {
+		if (loop_get_next(&workspace->clients, workspace->focus.current,
+		                  (void**)&new_focus) < 0) {
+			return -EFAULT;
 		}
 	} else {
-		if(loop_get_prev(&workspace->clients, workspace->focused,
-				 (void**)&new_focus) < 0) {
-			return(-EFAULT);
+		if (loop_get_prev(&workspace->clients, workspace->focus.current,
+		                  (void**)&new_focus) < 0) {
+			return -EFAULT;
 		}
 	}
 
-	if ((old_focus = workspace_get_focused_client(workspace))) {
-		client_save_pointer(old_focus);
-	}
+	/*
+	 * Every workspace with at least one client has a focused client. But only
+	 * the focused client on the focused workspace contains the pointer. Thus,
+	 * we do not save the pointer here but when workspaces are redrawn.
+	 */
 
-	workspace_focus_client(workspace, new_focus);
+	workspace->focus.next = new_focus;
+	workspace->focus.changed = 1;
 	workspace_needs_redraw(workspace);
 
-	return(0);
+	return 0;
 }
 
 int workspace_shift_client(struct workspace *workspace, struct client *client, int dir)
@@ -296,7 +357,7 @@ int workspace_shift_client(struct workspace *workspace, struct client *client, i
 		return(-EINVAL);
 	}
 
-	shift = client ? client : workspace->focused;
+	shift = client ? client : workspace->focus.current;
 
 	if(!shift) {
 		return(-ENOENT);

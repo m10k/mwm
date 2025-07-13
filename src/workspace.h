@@ -21,6 +21,7 @@ int workspace_find_client(struct workspace *workspace,
 int workspace_focus_client(struct workspace *workspace,
 			   struct client *client);
 struct client* workspace_get_focused_client(struct workspace *workspace);
+struct client* workspace_get_next_focused_client(struct workspace *workspace);
 
 int workspace_set_viewer(struct workspace *workspace, struct monitor *viewer);
 struct monitor* workspace_get_viewer(struct workspace *workspace);
@@ -33,6 +34,7 @@ int workspace_foreach_client(struct workspace *workspace,
 int workspace_needs_redraw(struct workspace *workspace);
 int workspace_redraw(struct workspace *workspace);
 
+int workspace_update_focus(struct workspace *workspace);
 int workspace_shift_focus(struct workspace *workspace, int dir);
 int workspace_shift_client(struct workspace *workspace, struct client *client, int dir);
 
