@@ -133,35 +133,6 @@ static int _cmp_workspace_number(struct workspace *workspace, int *number)
 	return(workspace_get_number(workspace) == *number ? 0 : 1);
 }
 
-static void _mwm_button_press(struct mwm *mwm, XEvent *event)
-{
-	XButtonPressedEvent *button_pressed;
-	struct monitor *event_monitor;
-	struct client *event_client;
-
-#if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
-#endif /* MWM_DEBUG */
-
-	button_pressed = &event->xbutton;
-
-	if(loop_find(&mwm->monitors, FIND_MONITOR_BY_WINDOW,
-		     &button_pressed->window, (void**)&event_monitor) == 0) {
-		mwm_focus_monitor(mwm, event_monitor);
-	}
-
-	/*
-	 * TODO: Handle the event
-	 */
-
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
-                           &button_pressed->window, &event_client) == 0) {
-		mwm_focus_client(mwm, event_client);
-	}
-
-	return;
-}
-
 static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 {
 	XConfigureRequestEvent *configure_request;
@@ -573,7 +544,6 @@ int mwm_new(struct mwm **dst)
 		}
 	}
 
-	mwm->xhandler[ButtonPress]      = (_mwm_xhandler_t*)_mwm_button_press;
 	mwm->xhandler[ConfigureRequest] = (_mwm_xhandler_t*)_mwm_configure_request;
 	mwm->xhandler[ConfigureNotify]  = (_mwm_xhandler_t*)_mwm_configure_notify;
 	mwm->xhandler[DestroyNotify]    = (_mwm_xhandler_t*)_mwm_destroy_notify;
@@ -1078,7 +1048,6 @@ int mwm_init(struct mwm *mwm)
 	XSelectInput(mwm->display, mwm->root,
 		     SubstructureRedirectMask |
 		     SubstructureNotifyMask |
-		     /* ButtonPressMask | */
 		     PointerMotionMask |
 		     EnterWindowMask |
 		     LeaveWindowMask |
