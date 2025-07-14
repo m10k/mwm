@@ -26,8 +26,10 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *geom);
 
 int monitor_set_workspace(struct monitor *monitor, struct workspace *workspace);
 
+int monitor_focus_changed(struct monitor *mon);
 struct workspace* monitor_get_workspace(struct monitor *monitor);
 struct client* monitor_get_focused_client(struct monitor *monitor);
+struct client* monitor_get_next_focused_client(struct monitor *monitor);
 
 int monitor_arrange_clients(struct monitor *monitor);
 int monitor_needs_redraw(struct monitor *monitor);

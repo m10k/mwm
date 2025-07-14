@@ -38,6 +38,8 @@ int mwm_init(struct mwm *mwm);
 int mwm_run(struct mwm *mwm);
 int mwm_stop(struct mwm *mwm);
 
+int mwm_focus_changed(struct mwm *mwm);
+int mwm_update_focus(struct mwm *mwm);
 int mwm_needs_redraw(struct mwm *mwm);
 int mwm_redraw(struct mwm *mwm);
 

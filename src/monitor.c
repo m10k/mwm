@@ -362,6 +362,15 @@ struct workspace* monitor_get_workspace(struct monitor *monitor)
 	return(monitor->workspace);
 }
 
+int monitor_focus_changed(struct monitor *mon)
+{
+	if (!mon) {
+		return -EINVAL;
+	}
+
+	return mwm_focus_changed(mon->mwm);
+}
+
 struct client* monitor_get_focused_client(struct monitor *monitor)
 {
 	struct workspace *workspace;
@@ -373,6 +382,19 @@ struct client* monitor_get_focused_client(struct monitor *monitor)
 	}
 
 	return(workspace_get_focused_client(workspace));
+}
+
+struct client* monitor_get_next_focused_client(struct monitor *monitor)
+{
+	struct workspace *workspace;
+
+	workspace = monitor_get_workspace(monitor);
+
+	if (!workspace) {
+		return NULL;
+	}
+
+	return workspace_get_next_focused_client(workspace);
 }
 
 int monitor_arrange_clients(struct monitor *monitor)

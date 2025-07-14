@@ -23,6 +23,18 @@ struct workspace {
 	int needs_redraw;
 };
 
+int workspace_focus_changed(struct workspace *workspace)
+{
+	if (!workspace) {
+		return -EINVAL;
+	}
+
+	workspace->focus.changed = 1;
+	monitor_focus_changed(workspace->viewer);
+
+	return 0;
+}
+
 int workspace_new(const int number, struct workspace **workspace)
 {
 	struct workspace *wspace;
@@ -82,7 +94,7 @@ int workspace_attach_client(struct workspace *workspace, struct client *client)
 
 	if (!workspace->focus.current) {
 		workspace->focus.next = client;
-		workspace->focus.changed = 1;
+		workspace_focus_changed(workspace);
 #if MWM_DEBUG_VERBOSE
 		fprintf(stderr, "%s: %p->focus.next = %p\n", __func__, (void*)workspace, (void*)client);
 #endif /* MWM_DEBUG_VERBOSE */
@@ -92,7 +104,6 @@ int workspace_attach_client(struct workspace *workspace, struct client *client)
 
 	return(0);
 }
-
 
 int workspace_detach_client(struct workspace *workspace, struct client *client)
 {
@@ -134,7 +145,7 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 
 		workspace->focus.next = next;
 		workspace->focus.current = NULL;
-		workspace->focus.changed = 1;
+		workspace_focus_changed(workspace);
 	}
 
 	err = loop_remove(&workspace->clients, client);
@@ -198,7 +209,7 @@ int workspace_focus_client(struct workspace *workspace, struct client *client)
 		fprintf(stderr, "%s: %p->focus.next = %p\n", __func__, (void*)workspace, (void*)client);
 #endif /* MWM_DEBUG_VERBOSE */
 		workspace->focus.next = client;
-		workspace->focus.changed = 1;
+		workspace_focus_changed(workspace);
 		workspace_needs_redraw(workspace);
 	}
 
@@ -250,6 +261,10 @@ int workspace_update_focus(struct workspace *workspace)
 {
 	if (!workspace) {
 		return -EINVAL;
+	}
+
+	if (!workspace->focus.changed) {
+		return -EAGAIN;
 	}
 
 #if MWM_DEBUG_VERBOSE
@@ -338,7 +353,7 @@ int workspace_shift_focus(struct workspace *workspace, int dir)
 	 */
 
 	workspace->focus.next = new_focus;
-	workspace->focus.changed = 1;
+	workspace_focus_changed(workspace);
 	workspace_needs_redraw(workspace);
 
 	return 0;

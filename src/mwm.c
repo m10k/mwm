@@ -59,10 +59,12 @@ struct mwm {
 	int needs_redraw;
 	struct loop *monitors;
 	struct loop *workspaces;
-	struct monitor *current_monitor;
-	struct client *focused_client;
 
-	struct monitor *next_monitor;
+	struct {
+		struct monitor *current;
+		struct monitor *next;
+		int changed;
+	} focus;
 
 	struct xrandr *xrandr;
 
@@ -441,7 +443,7 @@ static void _mwm_motion_notify(struct mwm *mwm, XMotionEvent *event)
 		return;
 	}
 
-	if(mwm_get_focused_monitor(mwm) != monitor) {
+	if (mwm->focus.current != monitor) {
 		mwm_focus_monitor(mwm, monitor);
 	}
 
@@ -1220,8 +1222,6 @@ int mwm_run(struct mwm *mwm)
 	mwm->running = 1;
 
 	while(mwm->running) {
-		struct client *focused_client;
-
 		/*
 		 * Handle as many events as possible before redrawing. This is necessary
 		 * to avoid problems where an application unmaps/destroys multiple windows
@@ -1243,23 +1243,10 @@ int mwm_run(struct mwm *mwm)
 			}
 		} while(XEventsQueued(mwm->display, QueuedAfterFlush) > 0);
 
-		if (mwm->next_monitor && mwm->next_monitor != mwm->current_monitor) {
-			monitor_needs_redraw(mwm->current_monitor);
-			monitor_needs_redraw(mwm->next_monitor);
+		mwm_update_focus(mwm);
 
-			mwm->current_monitor = mwm->next_monitor;
-			mwm->next_monitor = NULL;
-		}
-
-		if(mwm->needs_redraw) {
+		if (mwm->needs_redraw) {
 			mwm_redraw(mwm);
-		}
-
-		focused_client = mwm_get_focused_client(mwm);
-
-		if(mwm->focused_client != focused_client) {
-			client_focus(focused_client);
-			mwm->focused_client = focused_client;
 		}
 	}
 
@@ -1309,32 +1296,42 @@ int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon)
 int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon)
 {
 	struct workspace *workspace;
-	struct monitor *next_monitor;
-
-	next_monitor = NULL;
 
 	if(!mwm || !mon) {
 		return(-EINVAL);
 	}
 
-	loop_get_next(&mwm->monitors, mon, (void**)&next_monitor);
-
-	if(loop_remove(&mwm->monitors, mon) < 0) {
-		return(-ENODEV);
+	if (mwm->focus.next == mon) {
+		mwm->focus.next = NULL;
 	}
 
-	if (mwm->current_monitor == mon) {
+	if (mwm->focus.current == mon) {
+		struct monitor *next_monitor;
+
+		next_monitor = NULL;
+
+		loop_get_next(&mwm->monitors, mon, (void**)&next_monitor);
 #if MWM_DEBUG
 		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
 		        __func__, (void*)mon, (void*)next_monitor);
 #endif /* MWM_DEBUG */
-		mwm_focus_monitor(mwm, next_monitor);
+		mwm->focus.next = next_monitor;
+
+		/*
+		 * Make sure mwm->focus.current is not set to the monitor
+		 * we're detaching because it will be freed.
+		 */
+		mwm_update_focus(mwm);
+	}
+
+	if (loop_remove(&mwm->monitors, mon) < 0) {
+		return -ENODEV;
 	}
 
 	workspace = monitor_get_workspace(mon);
 	workspace_set_viewer(workspace, NULL);
 
-	return(0);
+	return 0;
 }
 
 int mwm_focus_monitor(struct mwm *mwm, struct monitor *monitor)
@@ -1346,28 +1343,29 @@ int mwm_focus_monitor(struct mwm *mwm, struct monitor *monitor)
 #if MWM_DEBUG
 		fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
 #endif /* MWM_DEBUG */
-	mwm->next_monitor = monitor;
+	mwm->focus.next = monitor;
+	mwm->focus.changed = 1;
 
 	return 0;
 }
 
 struct monitor* mwm_get_focused_monitor(struct mwm *mwm)
 {
-	return(mwm->current_monitor);
+	return mwm->focus.current;
 }
 
 int mwm_attach_client(struct mwm *mwm, struct client *client)
 {
 	struct workspace *workspace;
 
-	if(!mwm || !client) {
-		return(-EINVAL);
+	if (!mwm || !client) {
+		return -EINVAL;
 	}
 
 	workspace = NULL;
 
-	if(mwm->current_monitor) {
-		workspace = monitor_get_workspace(mwm->current_monitor);
+	if (mwm->focus.current) {
+		workspace = monitor_get_workspace(mwm->focus.current);
 	}
 
 	if(!workspace) {
@@ -1378,7 +1376,7 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 
 		if(loop_get_first(&mwm->workspaces, (void**)&workspace) < 0) {
 			/* this really shouldn't happen */
-			return(-EFAULT);
+			return -EFAULT;
 		}
 	}
 
@@ -1393,7 +1391,7 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 
 	client_set_state(client, NormalState);
 
-	return(workspace_attach_client(workspace, client));
+	return workspace_attach_client(workspace, client);
 }
 
 int mwm_detach_client(struct mwm *mwm, struct client *client)
@@ -1415,6 +1413,10 @@ int mwm_focus_client(struct mwm *mwm, struct client *client)
 {
 	struct workspace *workspace;
 
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr, "mwm_focus_client(%p, %p)\n", (void*)mwm, (void*)client);
+#endif /* MWM_DEBUG_VERBOSE */
+
 	if(!mwm) {
 		return(-EINVAL);
 	}
@@ -1425,24 +1427,21 @@ int mwm_focus_client(struct mwm *mwm, struct client *client)
 		workspace = mwm_get_focused_workspace(mwm);
 	}
 
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr, "%s: workspace = %p\n", __func__, (void*)workspace);
+#endif /* MWM_DEBUG_VERBOSE */
+
 	if(!workspace) {
 		return(-EBADFD);
 	}
 
+	mwm->focus.changed = 1;
 	return(workspace_focus_client(workspace, client));
 }
 
 struct client* mwm_get_focused_client(struct mwm *mwm)
 {
-	struct monitor *focused_monitor;
-
-	focused_monitor = mwm_get_focused_monitor(mwm);
-
-	if(!focused_monitor) {
-		return(NULL);
-	}
-
-	return(monitor_get_focused_client(focused_monitor));
+	return mwm->focus.current ? monitor_get_focused_client(mwm->focus.current) : NULL;
 }
 
 struct find_client_args {
@@ -1482,17 +1481,7 @@ int mwm_find_client(struct mwm *mwm, int(*cmp)(struct client*, void*),
 
 struct workspace *mwm_get_focused_workspace(struct mwm *mwm)
 {
-	struct monitor *monitor;
-	struct workspace *workspace;
-
-	workspace = NULL;
-	monitor = mwm_get_focused_monitor(mwm);
-
-	if(monitor) {
-		workspace = monitor_get_workspace(monitor);
-	}
-
-	return(workspace);
+	return mwm->focus.current ? monitor_get_workspace(mwm->focus.current) : NULL;
 }
 
 int mwm_foreach_workspace(struct mwm *mwm,
@@ -1533,19 +1522,121 @@ int mwm_needs_redraw(struct mwm *mwm)
 	return(0);
 }
 
+int _monitor_update_focus(struct monitor *mon)
+{
+	int err;
+
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)mon);
+#endif /* MWM_DEBUG_VERBOSE */
+
+	if (!mon) {
+		return -EINVAL;
+	}
+
+	err = workspace_update_focus(monitor_get_workspace(mon));
+
+	if (!err) {
+		monitor_needs_redraw(mon);
+	}
+
+	return err;
+}
+
+int mwm_focus_changed(struct mwm *mwm)
+{
+	if (!mwm) {
+		return -EINVAL;
+	}
+
+	mwm->focus.changed = 1;
+	return 0;
+}
+
+int mwm_update_focus(struct mwm *mwm)
+{
+	struct client *current_client;
+	struct client *next_client;
+
+	if (!mwm) {
+		return -EINVAL;
+	}
+
+	if (!mwm->focus.changed) {
+		return -EAGAIN;
+	}
+
+	current_client = mwm->focus.current ? monitor_get_focused_client(mwm->focus.current) : NULL;
+	if (mwm->focus.next) {
+		next_client = monitor_get_next_focused_client(mwm->focus.next);
+		if (!next_client) {
+			next_client = monitor_get_focused_client(mwm->focus.next);
+		}
+	} else if (mwm->focus.current) {
+		next_client = monitor_get_next_focused_client(mwm->focus.current);
+	} else {
+		next_client = current_client;
+	}
+
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr,
+	        "mwm_update_focus: current_client = %p\n"
+	        "mwm_update_focus: next_client    = %p\n",
+	        (void*)current_client, (void*)next_client);
+#endif /* MWM_DEBUG_VERBOSE */
+
+	if (current_client && current_client != next_client) {
+		client_save_pointer(current_client);
+		_monitor_update_focus(mwm->focus.current);
+	}
+
+	if (mwm->focus.next) {
+		_monitor_update_focus(mwm->focus.next);
+
+		mwm->focus.current = mwm->focus.next;
+		mwm->focus.next = NULL;
+	}
+
+	mwm->focus.changed = 0;
+	return 0;
+}
+
 int mwm_redraw(struct mwm *mwm)
 {
-	if(!mwm) {
-		return(-EINVAL);
+	struct client *focus;
+
+	if (!mwm) {
+		return -EINVAL;
 	}
 
-	if(mwm->needs_redraw) {
-		loop_foreach(&mwm->monitors, (void(*)(void*))monitor_redraw);
-		loop_foreach(&mwm->workspaces, (void(*)(void*))workspace_redraw);
-		mwm->needs_redraw = 0;
+	if (!mwm->needs_redraw) {
+		return -EAGAIN;
 	}
 
-	return(0);
+#if MWM_DEBUG_VERBOSE
+	fprintf(stderr,
+	        "B: mwm->focus.current = %p ->workspace = %p\n"
+	        "B: mwm->focus.next    = %p ->workspace = %p\n",
+	        (void*)mwm->focus.current,
+	        mwm->focus.current ? (void*)monitor_get_workspace(mwm->focus.current) : NULL,
+	        (void*)mwm->focus.next,
+	        mwm->focus.next ? (void*)monitor_get_workspace(mwm->focus.next) : NULL);
+#endif /* MWM_DEBUG_VERBOSE */
+
+
+	loop_foreach(&mwm->monitors, (void(*)(void*))monitor_redraw);
+	loop_foreach(&mwm->workspaces, (void(*)(void*))workspace_redraw);
+
+	/*
+	 * We need the clients to be arranged first because we might move the
+	 * pointer when we focus on a different client.
+	 */
+	if ((focus = monitor_get_focused_client(mwm->focus.current))) {
+		client_focus(focus);
+	}
+
+	mwm->needs_redraw = 0;
+	return 0;
 }
 
 Window mwm_create_window(struct mwm *mwm, const int x, const int y, const int w, const int h)
