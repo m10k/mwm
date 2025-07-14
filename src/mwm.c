@@ -162,16 +162,6 @@ static void _mwm_button_press(struct mwm *mwm, XEvent *event)
 	return;
 }
 
-static void _mwm_client_message(struct mwm *mwm, XEvent *event)
-{
-	/* TODO: fullscreen toggle */
-#if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
-#endif /* MWM_DEBUG */
-
-	return;
-}
-
 static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 {
 	XConfigureRequestEvent *configure_request;
@@ -584,7 +574,6 @@ int mwm_new(struct mwm **dst)
 	}
 
 	mwm->xhandler[ButtonPress]      = (_mwm_xhandler_t*)_mwm_button_press;
-	mwm->xhandler[ClientMessage]    = (_mwm_xhandler_t*)_mwm_client_message;
 	mwm->xhandler[ConfigureRequest] = (_mwm_xhandler_t*)_mwm_configure_request;
 	mwm->xhandler[ConfigureNotify]  = (_mwm_xhandler_t*)_mwm_configure_notify;
 	mwm->xhandler[DestroyNotify]    = (_mwm_xhandler_t*)_mwm_destroy_notify;
