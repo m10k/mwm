@@ -23,8 +23,6 @@ struct client {
 	char *hint;
 };
 
-extern struct mwm *__mwm;
-
 int client_new(Window window, XWindowAttributes *attrs, struct client **client)
 {
 	struct client *cl;
@@ -104,11 +102,11 @@ int client_redraw(struct client *client)
 	}
 
 	if(client_is_visible(client)) {
-		XMapRaised(mwm_get_display(__mwm), client->window);
-		XMoveWindow(mwm_get_display(__mwm), client->window,
+		XMapRaised(mwm_get_display(), client->window);
+		XMoveWindow(mwm_get_display(), client->window,
 			    client->geom.x, client->geom.y);
 	} else {
-		XMoveWindow(mwm_get_display(__mwm), client->window,
+		XMoveWindow(mwm_get_display(), client->window,
 			    client->geom.w * -2, client->geom.y);
 	}
 
@@ -154,10 +152,10 @@ int client_show(struct client *client)
 	       client->geom.w, client->geom.h);
 #endif /* MWM_DEBUG */
 
-	XMoveResizeWindow(mwm_get_display(__mwm), client->window,
+	XMoveResizeWindow(mwm_get_display(), client->window,
 			  client->geom.x, client->geom.y,
 			  client->geom.w, client->geom.h);
-	XMapRaised(mwm_get_display(__mwm), client->window);
+	XMapRaised(mwm_get_display(), client->window);
 
 	return(0);
 }
@@ -188,7 +186,7 @@ int client_focus(struct client *client)
 		return(-EINVAL);
 	}
 
-	display = mwm_get_display(__mwm);
+	display = mwm_get_display();
 
 	XSetInputFocus(display, client->window, RevertToPointerRoot, CurrentTime);
 
@@ -222,7 +220,7 @@ int client_save_pointer(struct client *client)
 	int dontcare_i;
 	unsigned int dontcare_u;
 
-	display = mwm_get_display(__mwm);
+	display = mwm_get_display();
 
 	XQueryPointer(display, client->window, &dontcare_w, &dontcare_w,
 	              &client->pointer.x, &client->pointer.y, &dontcare_i,
@@ -273,7 +271,7 @@ int client_restore_pointer(struct client *client)
 {
 	Display *display;
 
-	display = mwm_get_display(__mwm);
+	display = mwm_get_display();
 
 #ifdef MWM_DEBUG
 	fprintf(stderr, "Restoring pointer (%d, %d), %dx%d\n",
@@ -282,7 +280,7 @@ int client_restore_pointer(struct client *client)
 #endif /* MWM_DEBUG */
 
 	if (client->pointer.x < 0 || client->pointer.y < 0) {
-		kbptr_move(__mwm, client, KBPTR_CENTER);
+		kbptr_move(client, KBPTR_CENTER);
 	} else {
 		/* scale the pointer position if the client was resized */
 		if (client->geom.w != client->pointer.w ||
@@ -305,11 +303,11 @@ int client_set_state(struct client *client, const long state)
 	data[0] = state;
 	data[1] = None;
 
-	if(mwm_get_atom_by_name(__mwm, "WM_STATE", (Atom*)&wm_state) < 0) {
+	if(mwm_get_atom_by_name("WM_STATE", (Atom*)&wm_state) < 0) {
 		return(-EIO);
 	}
 
-        XChangeProperty(mwm_get_display(__mwm), client->window,
+        XChangeProperty(mwm_get_display(), client->window,
 			wm_state, wm_state, 32,
 			PropModeReplace, (unsigned char*)data, 2);
         return(0);
@@ -319,13 +317,13 @@ static void _client_update_wm_hints(struct client *client)
 {
 	XWMHints *hints;
 
-	hints = XGetWMHints(mwm_get_display(__mwm),
+	hints = XGetWMHints(mwm_get_display(),
 			    client->window);
 
 	if (hints) {
 		if (hints->flags & XUrgencyHint) {
 			hints->flags &= ~XUrgencyHint;
-			XSetWMHints(mwm_get_display(__mwm),
+			XSetWMHints(mwm_get_display(),
 				    client->window, hints);
 		}
 
@@ -340,7 +338,7 @@ static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
 
 	hint = NULL;
 
-	if (mwm_get_atom(__mwm, MWM_ATOM_HINT, &MWM_HINT) < 0) {
+	if (mwm_get_atom(MWM_ATOM_HINT, &MWM_HINT) < 0) {
 		return -EIO;
 	}
 
@@ -348,7 +346,7 @@ static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
 		return 0;
 	}
 
-	if (mwm_get_text_property(__mwm, client->window, MWM_HINT,
+	if (mwm_get_text_property(client->window, MWM_HINT,
 	                          &hint) < 0) {
 		return -EIO;
 	}

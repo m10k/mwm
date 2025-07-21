@@ -31,65 +31,62 @@ typedef enum {
 	MWM_ATOM_MAX
 } mwm_atom_t;
 
-int mwm_new(struct mwm **mwm);
-int mwm_free(struct mwm **mwm);
+int mwm_init(void);
+int mwm_cleanup(void);
+int mwm_run(void);
+int mwm_stop(void);
 
-int mwm_init(struct mwm *mwm);
-int mwm_run(struct mwm *mwm);
-int mwm_stop(struct mwm *mwm);
+int mwm_needs_redraw(void);
+int mwm_redraw(void);
 
-int mwm_needs_redraw(struct mwm *mwm);
-int mwm_redraw(struct mwm *mwm);
+Display* mwm_get_display(void);
+Window mwm_get_root_window(void);
 
-Display* mwm_get_display(struct mwm *mwm);
-Window mwm_get_root_window(struct mwm *mwm);
+int mwm_attach_monitor(struct monitor *mon);
+int mwm_detach_monitor(struct monitor *mon);
+int mwm_focus_monitor(struct monitor *mon);
+struct monitor* mwm_get_focused_monitor(void);
+int mwm_find_monitor(int (*cmp)(struct monitor*, void*),
+                     void*, struct monitor**);
 
-int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon);
-int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon);
-int mwm_focus_monitor(struct mwm *mwm, struct monitor *mon);
-struct monitor* mwm_get_focused_monitor(struct mwm *mwm);
-int mwm_find_monitor(struct mwm *mwm, int (*cmp)(struct monitor*, void*),
-		     void*, struct monitor**);
+int mwm_attach_client(struct client *client);
+int mwm_detach_client(struct client *client);
+int mwm_focus_client(struct client *client);
+struct client* mwm_get_focused_client(void);
+int mwm_find_client(int (*cmp)(struct client*, void*),
+                    void*, struct client**);
 
-int mwm_attach_client(struct mwm *mwm, struct client *client);
-int mwm_detach_client(struct mwm *mwm, struct client *client);
-int mwm_focus_client(struct mwm *mwm, struct client *client);
-struct client* mwm_get_focused_client(struct mwm *mwm);
-int mwm_find_client(struct mwm *mwm, int (*cmp)(struct client*, void*),
-		    void*, struct client**);
+int mwm_attach_workspace(struct workspace *workspace);
+int mwm_detach_workspace(struct workspace *workspace);
+int mwm_focus_workspace(struct workspace *workspace);
+struct workspace* mwm_get_focused_workspace(void);
+int mwm_find_workspace(int (*cmp)(struct workspace*, void*),
+                       void*, struct workspace**);
+int mwm_foreach_workspace(int (*func)(struct workspace*, void*),
+                          void *data);
 
-int mwm_attach_workspace(struct mwm *mwm, struct workspace *workspace);
-int mwm_detach_workspace(struct mwm *mwm, struct workspace *workspace);
-int mwm_focus_workspace(struct mwm *mwm, struct workspace *workspace);
-struct workspace* mwm_get_focused_workspace(struct mwm *mwm);
-int mwm_find_workspace(struct mwm *mwm, int (*cmp)(struct workspace*, void*),
-		       void*, struct workspace**);
-int mwm_foreach_workspace(struct mwm *mwm,
-			  int (*func)(struct mwm*, struct workspace*, void*),
-			  void *data);
-
-Window mwm_create_window(struct mwm *mwm, const int x, const int y, const int w, const int h);
-GC mwm_create_gc(struct mwm *mwm);
-XftDraw* mwm_create_xft_context(struct mwm *mwm, Drawable drawable);
-Drawable mwm_create_pixmap(struct mwm *mwm, Window window, const int width, const int height);
-void mwm_free_pixmap(struct mwm *mwm, Drawable drawable);
-int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
+Window mwm_create_window(const int x, const int y, const int w, const int h);
+GC mwm_create_gc(void);
+XftDraw* mwm_create_xft_context(Drawable drawable);
+Drawable mwm_create_pixmap(Window window, const int width, const int height);
+void mwm_free_pixmap(Drawable drawable);
+int mwm_render_text(XftDraw *drawable,
                     mwm_palette_t palette, const char *text,
                     const int x, const int y,
                     const int w, const int h);
-int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
+int mwm_render_text_vertical(XftDraw *drawable,
                              mwm_palette_t palette, const char *text,
                              const int x, const int y,
                              const int w, const int h);
-int mwm_get_font_height(struct mwm *mwm);
-int mwm_get_text_width(struct mwm *mwm, const char *text);
-int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char **dst);
-unsigned long mwm_get_color(struct mwm *mwm, mwm_palette_t palette, mwm_color_t color);
+int mwm_get_font_height(void);
+int mwm_get_text_width(const char *text);
+int mwm_get_text_property(Window window, Atom atom, char **dst);
+unsigned long mwm_get_color(mwm_palette_t palette, mwm_color_t color);
 
-int mwm_get_status(struct mwm *mwm, char **dst);
-int mwm_grab_keys(struct mwm *mwm);
-int mwm_cmd(struct mwm *mwm, mwm_cmd_t, void *data);
-int mwm_get_atom_by_name(struct mwm *mwm, const char *name, Atom *dst);
-int mwm_get_atom(struct mwm *mwm, mwm_atom_t atom_id, Atom *dst);
+int mwm_get_status(char **dst);
+int mwm_grab_keys(void);
+int mwm_cmd(mwm_cmd_t, void *data);
+int mwm_get_atom_by_name(const char *name, Atom *dst);
+int mwm_get_atom(mwm_atom_t atom_id, Atom *dst);
 
 #endif /* MWM_H */

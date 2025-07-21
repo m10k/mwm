@@ -10,8 +10,6 @@ static struct option cmd_opts[] = {
 	{ NULL }
 };
 
-struct mwm *__mwm;
-
 static void print_usage(const char *argv0)
 {
 	printf("Usage: %s [-h]\n"
@@ -42,19 +40,12 @@ int main(int argc, char *argv[])
 		}
 	} while(opt >= 0);
 
-	err = mwm_new(&__mwm);
-
-	if(err < 0) {
-		fprintf(stderr, "mwm_new: %s\n", strerror(-err));
-		return(1);
-	}
-
-	err = mwm_init(__mwm);
+	err = mwm_init();
 
 	if(err < 0) {
 		fprintf(stderr, "mwm_init: %s\n", strerror(-err));
 	} else {
-		err = mwm_run(__mwm);
+		err = mwm_run();
 
 		if(err < 0) {
 			fprintf(stderr, "mwm_run: %s\n",
@@ -62,7 +53,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	mwm_free(&__mwm);
+	mwm_cleanup();
 
 	return(err);
 }

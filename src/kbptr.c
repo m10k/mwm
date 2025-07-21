@@ -18,8 +18,7 @@ static struct kbptr kbptr = {
 	.last_client = NULL
 };
 
-static void do_button(struct mwm *mwm,
-		      struct client *client,
+static void do_button(struct client *client,
 		      const unsigned int button,
 		      const unsigned int pressrelease)
 {
@@ -29,7 +28,7 @@ static void do_button(struct mwm *mwm,
 	Display *display;
 	Window window;
 
-	display = mwm_get_display(mwm);
+	display = mwm_get_display();
 	window = client_get_window(client);
 
 	switch(pressrelease) {
@@ -76,7 +75,7 @@ static void do_button(struct mwm *mwm,
 	return;
 }
 
-void kbptr_move(struct mwm *mwm, struct client *client, long direction)
+void kbptr_move(struct client *client, long direction)
 {
 	struct geom client_geom;
 	unsigned int dir;
@@ -131,18 +130,18 @@ void kbptr_move(struct mwm *mwm, struct client *client, long direction)
                 return;
         }
 
-        XWarpPointer(mwm_get_display(mwm), None, client_get_window(client),
+        XWarpPointer(mwm_get_display(), None, client_get_window(client),
                      0, 0, 0, 0,
                      kbptr.x, kbptr.y);
 
         return;
 }
 
-void kbptr_click(struct mwm *mwm, struct client *client, long button)
+void kbptr_click(struct client *client, long button)
 {
-	do_button(mwm, client, button, ButtonPress);
+	do_button(client, button, ButtonPress);
 	usleep(100000);
-	do_button(mwm, client, button, ButtonRelease);
+	do_button(client, button, ButtonRelease);
 
 	return;
 }

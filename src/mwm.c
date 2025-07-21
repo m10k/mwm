@@ -28,7 +28,7 @@
 #include "kbptr.h"
 #include "xrandr.h"
 
-typedef void (_mwm_xhandler_t)(struct mwm*, XEvent*);
+typedef void (_mwm_xhandler_t)(XEvent*);
 
 #define FIND_MONITOR_BY_ID       ((int(*)(void*, void*))_cmp_monitor_id)
 #define FIND_CLIENT_BY_WINDOW    ((int(*)(struct client*, void*))_cmp_client_window)
@@ -78,16 +78,19 @@ struct mwm {
 
 	struct palette palette[MWM_PALETTE_MAX];
 
-	void (*commands[MWM_CMD_MAX])(struct mwm*, void*);
+	void (*commands[MWM_CMD_MAX])(void*);
 
 	int (*xerror_default_handler)(Display*, XErrorEvent*);
 };
 
-extern struct mwm *__mwm;
+static struct mwm *_mwm;
 
 static int _xerror_startup(Display *display, XErrorEvent *event);
 static int _xerror_handle(Display *display, XErrorEvent *event);
 static int _xerror_nop(Display *display, XErrorEvent *event);
+
+static int mwm_new(struct mwm **mwm);
+static int mwm_free(struct mwm **mwm);
 
 static int _cmp_client_window(struct client *client, Window *window)
 {
@@ -133,7 +136,7 @@ static int _cmp_workspace_number(struct workspace *workspace, int *number)
 	return(workspace_get_number(workspace) == *number ? 0 : 1);
 }
 
-static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
+static void _mwm_configure_request(XEvent *event)
 {
 	XConfigureRequestEvent *configure_request;
 	struct client *client;
@@ -151,8 +154,8 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 
 	configure_request = &event->xconfigurerequest;
 
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
-			   &configure_request->window, &client) < 0) {
+	if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
+	                    &configure_request->window, &client) < 0) {
 		XWindowChanges changes;
 		unsigned int value_mask;
 
@@ -167,55 +170,55 @@ static void _mwm_configure_request(struct mwm *mwm, XEvent *event)
 		changes.stack_mode = configure_request->detail;
 		value_mask = configure_request->value_mask | CWBorderWidth;
 
-		XConfigureWindow(mwm->display, configure_request->window,
+		XConfigureWindow(_mwm->display, configure_request->window,
 				 value_mask, &changes);
 	} else {
 		/* Clients don't get to choose their geometry */
 		client_set_state(client, NormalState);
 	}
 
-	XSync(mwm->display, False);
+	XSync(_mwm->display, False);
 
 	return;
 }
 
-static void _mwm_configure_notify(struct mwm *mwm, XEvent *event)
+static void _mwm_configure_notify(XEvent *event)
 {
 	XConfigureEvent *cevent;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 	cevent = &event->xconfigure;
 
-	if(cevent->window != mwm->root) {
+	if(cevent->window != _mwm->root) {
 		return;
 	}
 
-	if(x_get_geom(mwm->display, mwm->root, &mwm->root_geom) < 0) {
-		mwm_stop(mwm);
+	if(x_get_geom(_mwm->display, _mwm->root, &_mwm->root_geom) < 0) {
+		mwm_stop();
 	}
 
 	return;
 }
 
-static void _mwm_destroy_notify(struct mwm *mwm, XDestroyWindowEvent *event)
+static void _mwm_destroy_notify(XDestroyWindowEvent *event)
 {
 	struct client *client;
 
 	/* get the client and detach it */
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+	if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) < 0) {
 		fprintf(stderr, "Couldn't find client\n");
 		return;
 	}
 
-	if(mwm_detach_client(mwm, client) < 0) {
+	if (mwm_detach_client(client) < 0) {
 		fprintf(stderr, "Couldn't detach client\n");
 		return;
 	}
@@ -224,7 +227,7 @@ static void _mwm_destroy_notify(struct mwm *mwm, XDestroyWindowEvent *event)
 	return;
 }
 
-static void _mwm_enter_notify(struct mwm *mwm, XCrossingEvent *event)
+static void _mwm_enter_notify(XCrossingEvent *event)
 {
 	struct client *client;
 	struct monitor *monitor;
@@ -234,33 +237,33 @@ static void _mwm_enter_notify(struct mwm *mwm, XCrossingEvent *event)
 
 	/* pointer has entered a window - move focus, if it makes sense */
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if((event->mode != NotifyNormal || event->detail == NotifyInferior) &&
-	   event->window == mwm->root) {
+	if ((event->mode != NotifyNormal || event->detail == NotifyInferior) &&
+	    event->window == _mwm->root) {
 		return;
 	}
 
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) == 0) {
-		mwm_focus_client(mwm, client);
+		mwm_focus_client(client);
 	}
 
-	if(loop_find(&mwm->monitors, FIND_MONITOR_BY_WINDOW,
-		     &event->window, (void**)&monitor) == 0) {
-		mwm_focus_monitor(mwm, monitor);
+	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_WINDOW,
+	             &event->window, (void**)&monitor) == 0) {
+		mwm_focus_monitor(monitor);
 	}
 
 	return;
 }
 
-static void _mwm_expose(struct mwm *mwm, XExposeEvent *event)
+static void _mwm_expose(XExposeEvent *event)
 {
 	struct monitor *monitor;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p) W=0x%lx\n", __func__, (void*)mwm, (void*)event, event->window);
+	fprintf(stderr, "%s(%p) W=0x%lx\n", __func__, (void*)event, event->window);
 #endif /* MWM_DEBUG */
 
 	/* redraw the status bar, if we have one */
@@ -269,7 +272,7 @@ static void _mwm_expose(struct mwm *mwm, XExposeEvent *event)
 		return;
 	}
 
-	if(loop_find(&mwm->monitors, FIND_MONITOR_BY_WINDOW,
+	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_WINDOW,
 		     &event->window, (void**)&monitor) == 0) {
 		monitor_needs_redraw(monitor);
 	}
@@ -277,26 +280,26 @@ static void _mwm_expose(struct mwm *mwm, XExposeEvent *event)
 	return;
 }
 
-static void _mwm_focus_in(struct mwm *mwm, XFocusInEvent *event)
+static void _mwm_focus_in(XFocusInEvent *event)
 {
 	struct client *client;
 
 	/* move focus to the client referenced by the event */
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
 			   &event->window, &client) < 0) {
 		return;
 	}
 
-	mwm_focus_client(mwm, client);
+	mwm_focus_client(client);
 
 	return;
 }
 
-static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
+static void _mwm_key_press(XKeyEvent *event)
 {
 	extern struct key_binding config_keybindings[];
 	struct key_binding *binding;
@@ -304,7 +307,7 @@ static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
 	unsigned int mask;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 #define BUTTONMASK              (ButtonPressMask | ButtonReleaseMask)
@@ -314,12 +317,12 @@ static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
 
 	/* handle keyboard shortcuts */
 
-	keysym = XkbKeycodeToKeysym(mwm->display, event->keycode, 0, 0);
+	keysym = XkbKeycodeToKeysym(_mwm->display, event->keycode, 0, 0);
 	mask = CLEANMASK(event->state);
 
 	for(binding = config_keybindings; binding->cmd < MWM_CMD_MAX; binding++) {
 		if(keysym == binding->key && mask == CLEANMASK(binding->mod)) {
-			mwm_cmd(mwm, binding->cmd, binding->arg);
+			mwm_cmd(binding->cmd, binding->arg);
 		}
 	}
 
@@ -330,30 +333,30 @@ static void _mwm_key_press(struct mwm *mwm, XKeyEvent *event)
 	return;
 }
 
-static void _mwm_mapping_notify(struct mwm *mwm, XMappingEvent *event)
+static void _mwm_mapping_notify(XMappingEvent *event)
 {
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 	XRefreshKeyboardMapping(event);
 
 	if(event->request == MappingKeyboard) {
-		mwm_grab_keys(mwm);
+		mwm_grab_keys();
 	}
 
 	return;
 }
 
-static void _mwm_map_request(struct mwm *mwm, XMapRequestEvent *event)
+static void _mwm_map_request(XMapRequestEvent *event)
 {
 	XWindowAttributes attrs;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if(!XGetWindowAttributes(mwm->display, event->window, &attrs)) {
+	if(!XGetWindowAttributes(_mwm->display, event->window, &attrs)) {
 		return;
 	}
 
@@ -361,7 +364,7 @@ static void _mwm_map_request(struct mwm *mwm, XMapRequestEvent *event)
 		return;
 	}
 
-	if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
 			   &event->window, NULL) < 0) {
 		struct client *client;
 
@@ -370,7 +373,7 @@ static void _mwm_map_request(struct mwm *mwm, XMapRequestEvent *event)
 			return;
 		}
 
-		if(mwm_attach_client(mwm, client) < 0) {
+		if(mwm_attach_client(client) < 0) {
 			/* ENOMEM */
 			client_free(&client);
 			return;
@@ -380,13 +383,13 @@ static void _mwm_map_request(struct mwm *mwm, XMapRequestEvent *event)
 	return;
 }
 
-static void _mwm_motion_notify(struct mwm *mwm, XMotionEvent *event)
+static void _mwm_motion_notify(XMotionEvent *event)
 {
 	struct monitor *monitor;
 	struct geom pointer_geom;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 	/* move focus to the monitor referenced in the event */
@@ -397,33 +400,33 @@ static void _mwm_motion_notify(struct mwm *mwm, XMotionEvent *event)
 	pointer_geom.w = 1;
 	pointer_geom.h = 1;
 
-	if(loop_find(&mwm->monitors, FIND_MONITOR_BY_GEOM,
+	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_GEOM,
 		     &pointer_geom, (void**)&monitor) < 0) {
 		return;
 	}
 
-	if(mwm_get_focused_monitor(mwm) != monitor) {
-		mwm_focus_monitor(mwm, monitor);
+	if(mwm_get_focused_monitor() != monitor) {
+		mwm_focus_monitor(monitor);
 	}
 
 	return;
 }
 
-static void _mwm_property_notify(struct mwm *mwm, XPropertyEvent *event)
+static void _mwm_property_notify(XPropertyEvent *event)
 {
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 	/* FIXME: Property notification handling must be implemented more thoroughly */
 
-	if((event->window == mwm->root)) {
+	if ((event->window == _mwm->root)) {
 		/* if(event->atom == XA_WM_NAME) */
-		mwm_needs_redraw(mwm);
+		mwm_needs_redraw();
 	} else {
 		struct client *event_client;
 
-		if (mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+		if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
 				    &event->window, &event_client) == 0) {
 			client_property_notify(event_client, event);
 		}
@@ -432,50 +435,50 @@ static void _mwm_property_notify(struct mwm *mwm, XPropertyEvent *event)
 	return;
 }
 
-static void _mwm_unmap_notify(struct mwm *mwm, XUnmapEvent *event)
+static void _mwm_unmap_notify(XUnmapEvent *event)
 {
 	struct client *client;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-        if(mwm_find_client(mwm, FIND_CLIENT_BY_WINDOW,
+        if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
                            &event->window, &client) < 0) {
 		return;
 	}
 
-	XGrabServer(mwm->display);
-	XSync(mwm->display, False);
+	XGrabServer(_mwm->display);
+	XSync(_mwm->display, False);
 	XSetErrorHandler(_xerror_nop);
 
 	client_set_state(client, WithdrawnState);
 
 	if(!event->send_event) {
-		mwm_detach_client(mwm, client);
+		mwm_detach_client(client);
 		client_free(&client);
 	}
 
-	XSync(mwm->display, False);
+	XSync(_mwm->display, False);
 	XSetErrorHandler(_xerror_handle);
-	XUngrabServer(mwm->display);
+	XUngrabServer(_mwm->display);
 
 	return;
 }
 
 static void _attach_monitor(struct xrandr *xrr,
-			    xrandr_crtc_t crtc,
-			    struct geom *geom,
-			    struct mwm *mwm)
+                            xrandr_crtc_t crtc,
+                            struct geom *geom,
+                            void *data)
 {
 	struct monitor *mon;
 
-	if (monitor_new(mwm, crtc, geom->x, geom->y, geom->w, geom->h, &mon) < 0) {
+	if (monitor_new(crtc, geom->x, geom->y, geom->w, geom->h, &mon) < 0) {
 		fprintf(stderr, "Ran out of memory trying to allocate a monitor\n");
 		return;
 	}
 
-	if (mwm_attach_monitor(mwm, mon) < 0) {
+	if (mwm_attach_monitor(mon) < 0) {
 		fprintf(stderr, "Could not attach monitor %lx\n", crtc);
 		monitor_free(&mon);
 	}
@@ -484,31 +487,31 @@ static void _attach_monitor(struct xrandr *xrr,
 }
 
 static void _detach_monitor(struct xrandr *xrr,
-			    xrandr_crtc_t crtc,
-			    struct geom *geom,
-			    struct mwm *mwm)
+                            xrandr_crtc_t crtc,
+                            struct geom *geom,
+                            void *data)
 {
 	struct monitor *mon;
 
-	if (loop_find(&mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
 		fprintf(stderr, "Monitor %lx not attached\n", crtc);
 		return;
 	}
 
-	mwm_detach_monitor(mwm, mon);
+	mwm_detach_monitor(mon);
 	monitor_free(&mon);
 
 	return;
 }
 
 static void _change_monitor_geometry(struct xrandr *xrr,
-				     xrandr_crtc_t crtc,
-				     struct geom *geom,
-				     struct mwm *mwm)
+                                     xrandr_crtc_t crtc,
+                                     struct geom *geom,
+                                     void *data)
 {
 	struct monitor *mon;
 
-	if (loop_find(&mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
 		fprintf(stderr, "%s: Could not find monitor %lx\n", __func__, crtc);
 		return;
 	}
@@ -518,7 +521,7 @@ static void _change_monitor_geometry(struct xrandr *xrr,
 	return;
 }
 
-int mwm_new(struct mwm **dst)
+static int mwm_new(struct mwm **dst)
 {
 	struct mwm *mwm;
 	int err;
@@ -567,72 +570,75 @@ cleanup:
 	return(err);
 }
 
-int mwm_free(struct mwm **mwm)
+static int mwm_free(struct mwm **mwm)
 {
-	if(!mwm) {
-		return(-EINVAL);
+	if (!mwm) {
+		return -EINVAL;
 	}
 
-	if(!*mwm) {
-		return(-EALREADY);
+	if (!*mwm) {
+		return -EALREADY;
 	}
 
 	loop_free(&(*mwm)->workspaces);
 	loop_free(&(*mwm)->monitors);
 
-	if((*mwm)->display) {
+	if ((*mwm)->display) {
 		XCloseDisplay((*mwm)->display);
 	}
 
 	free(*mwm);
 	*mwm = NULL;
 
-	return(0);
+	return 0;
 }
 
-Display* mwm_get_display(struct mwm *mwm)
+int mwm_cleanup(void)
 {
-	return(mwm->display);
+	return mwm_free(&_mwm);
 }
 
-Window mwm_get_root_window(struct mwm *mwm)
+Display* mwm_get_display(void)
 {
-	return(mwm->root);
+	return(_mwm->display);
 }
 
-static int _color_init(struct mwm *mwm,
-		       unsigned long *color,
+Window mwm_get_root_window(void)
+{
+	return(_mwm->root);
+}
+
+static int _color_init(unsigned long *color,
 		       XftColor *xcolor,
 		       const char *colorspec)
 {
 	Visual *visual;
 	Colormap colormap;
 
-	visual = DefaultVisual(mwm->display, mwm->screen);
-	colormap = DefaultColormap(mwm->display, mwm->screen);
+	visual = DefaultVisual(_mwm->display, _mwm->screen);
+	colormap = DefaultColormap(_mwm->display, _mwm->screen);
 
-	if(!XftColorAllocName(mwm->display, visual, colormap,
+	if (!XftColorAllocName(_mwm->display, visual, colormap,
 			      colorspec, xcolor)) {
-		return(-EIO);
+		return -EIO;
 	}
 
 	*color = xcolor->pixel;
-	return(0);
+	return 0;
 }
 
-static int _palette_init(struct mwm *mwm,
-			 struct palette *palette,
+static int _palette_init(struct palette *palette,
 			 union colorset *colorset)
 {
 	int i;
 
-	for(i = 0; i < MWM_COLOR_MAX; i++) {
-		_color_init(mwm, &palette->color[i],
+	for (i = 0; i < MWM_COLOR_MAX; i++) {
+		_color_init(&palette->color[i],
 			    &palette->xcolor[i],
 			    colorset->indexed[i]);
 	}
 
-	return(0);
+	return 0;
 }
 
 void _sigchld(int unused)
@@ -642,12 +648,12 @@ void _sigchld(int unused)
 		exit(1);
 	}
 
-	while(waitpid(-1, NULL, WNOHANG) > 0);
+	while (waitpid(-1, NULL, WNOHANG) > 0);
 
 	return;
 }
 
-static void _cmd_spawn(struct mwm *mwm, void *arg)
+static void _cmd_spawn(void *arg)
 {
         char **argv;
 	pid_t pid;
@@ -656,7 +662,7 @@ static void _cmd_spawn(struct mwm *mwm, void *arg)
 	pid = fork();
 
 	if(pid == 0) {
-		close(ConnectionNumber(mwm->display));
+		close(ConnectionNumber(_mwm->display));
 		setsid();
 		execvp(*argv, argv);
 		exit(0);
@@ -665,16 +671,16 @@ static void _cmd_spawn(struct mwm *mwm, void *arg)
 	return;
 }
 
-static void _cmd_show_workspace(struct mwm *mwm, void *arg)
+static void _cmd_show_workspace(void *arg)
 {
 	struct monitor *monitor;
 	struct workspace *workspace;
 	long number;
 
         number = (long)arg;
-	monitor = mwm_get_focused_monitor(mwm);
+        monitor = mwm_get_focused_monitor();
 
-	if(loop_find(&mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
+	if(loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
 		     (void*)&number, (void**)&workspace) < 0) {
 		return;
 	}
@@ -683,7 +689,7 @@ static void _cmd_show_workspace(struct mwm *mwm, void *arg)
 	return;
 }
 
-static void _cmd_move_to_workspace(struct mwm *mwm, void *arg)
+static void _cmd_move_to_workspace(void *arg)
 {
 	struct workspace *src_workspace;
 	struct workspace *dst_workspace;
@@ -691,20 +697,20 @@ static void _cmd_move_to_workspace(struct mwm *mwm, void *arg)
 	long dst_number;
 
 	dst_number = (long)arg;
-	client = mwm_get_focused_client(mwm);
+	client = mwm_get_focused_client();
 
-	if(!client) {
+	if (!client) {
 		return;
 	}
 
-	if(loop_find(&mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
-		     (void*)&dst_number, (void**)&dst_workspace) < 0) {
+	if (loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
+	              (void*)&dst_number, (void**)&dst_workspace) < 0) {
 		return;
 	}
 
 	src_workspace = client_get_workspace(client);
 
-	if(src_workspace != dst_workspace) {
+	if (src_workspace != dst_workspace) {
 		workspace_detach_client(src_workspace, client);
 		workspace_attach_client(dst_workspace, client);
 	}
@@ -712,16 +718,16 @@ static void _cmd_move_to_workspace(struct mwm *mwm, void *arg)
 	return;
 }
 
-static void _cmd_set_layout(struct mwm *mwm, void *arg)
+static void _cmd_set_layout(void *arg)
 {
 	extern struct layout *layouts[];
 	struct monitor *monitor;
 	long num;
 
 	num = (long)arg;
-	monitor = mwm_get_focused_monitor(mwm);
+	monitor = mwm_get_focused_monitor();
 
-	if(monitor_get_layout(monitor) != layouts[num]) {
+	if (monitor_get_layout(monitor) != layouts[num]) {
 		monitor_set_layout(monitor, layouts[num]);
 		monitor_needs_redraw(monitor);
 	}
@@ -729,33 +735,33 @@ static void _cmd_set_layout(struct mwm *mwm, void *arg)
 	return;
 }
 
-static void _cmd_shift_focus(struct mwm *mwm, void *arg)
+static void _cmd_shift_focus(void *arg)
 {
 	struct workspace *workspace;
 	long dir;
 
 	dir = (long)arg;
 
-	workspace = mwm_get_focused_workspace(mwm);
+	workspace = mwm_get_focused_workspace();
 	workspace_shift_focus(workspace, dir);
 
 	return;
 }
 
-static void _cmd_shift_client(struct mwm *mwm, void *arg)
+static void _cmd_shift_client(void *arg)
 {
 	struct workspace *workspace;
 	long dir;
 
 	dir = (long)arg;
 
-	workspace = mwm_get_focused_workspace(mwm);
+	workspace = mwm_get_focused_workspace();
 	workspace_shift_client(workspace, NULL, dir);
 
 	return;
 }
 
-static void _cmd_shift_monitor_focus(struct mwm *mwm, void *arg)
+static void _cmd_shift_monitor_focus(void *arg)
 {
 	struct monitor *src_monitor;
 	struct monitor *dst_monitor;
@@ -764,30 +770,30 @@ static void _cmd_shift_monitor_focus(struct mwm *mwm, void *arg)
 	dir = (long)arg;
 	/* move focus to previous or next monitor */
 
-	if(!mwm || dir == 0) {
+	if (dir == 0) {
 		return;
 	}
 
-	src_monitor = mwm_get_focused_monitor(mwm);
+	src_monitor = mwm_get_focused_monitor();
 
-	if(dir > 0) {
-		if(loop_get_next(&mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
+	if (dir > 0) {
+		if (loop_get_next(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
 			return;
 		}
 	} else {
-		if(loop_get_prev(&mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
+		if (loop_get_prev(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
 			return;
 		}
 	}
 
-	if(src_monitor != dst_monitor) {
+	if (src_monitor != dst_monitor) {
 		struct client *src_client;
 
 		if ((src_client = monitor_get_focused_client(src_monitor))) {
 			client_save_pointer(src_client);
 		}
 
-		mwm_focus_monitor(mwm, dst_monitor);
+		mwm_focus_monitor(dst_monitor);
 
 		monitor_needs_redraw(src_monitor);
 		monitor_needs_redraw(dst_monitor);
@@ -796,7 +802,7 @@ static void _cmd_shift_monitor_focus(struct mwm *mwm, void *arg)
 	return;
 }
 
-static void _cmd_shift_workspace(struct mwm *mwm, void *arg)
+static void _cmd_shift_workspace(void *arg)
 {
 	struct monitor *src_monitor;
 	struct monitor *dst_monitor;
@@ -807,62 +813,62 @@ static void _cmd_shift_workspace(struct mwm *mwm, void *arg)
 
 	dir = (long)arg;
 
-	if(!mwm || dir == 0) {
+	if (dir == 0) {
 		return;
 	}
 
-	src_monitor = mwm_get_focused_monitor(mwm);
+	src_monitor = mwm_get_focused_monitor();
 	workspace = monitor_get_workspace(src_monitor);
 
-	if(dir > 0) {
-		if(loop_get_next(&mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
+	if (dir > 0) {
+		if (loop_get_next(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
 			return;
 		}
 	} else {
-		if(loop_get_prev(&mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
+		if (loop_get_prev(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
 			return;
 		}
 	}
 
-	if(src_monitor != dst_monitor) {
+	if (src_monitor != dst_monitor) {
 		monitor_set_workspace(dst_monitor, workspace);
-		mwm_focus_monitor(mwm, dst_monitor);
+		mwm_focus_monitor(dst_monitor);
 	}
 
 	return;
 }
 
-static void _cmd_quit(struct mwm *mwm, void *arg)
+static void _cmd_quit(void *arg)
 {
-	mwm_stop(mwm);
+	mwm_stop();
 	return;
 }
 
-static void _cmd_kbptr_move(struct mwm *mwm, void *arg)
+static void _cmd_kbptr_move(void *arg)
 {
 	struct client *client;
 	long dir;
 
 	dir = (long)arg;
-	client = mwm_get_focused_client(mwm);
+	client = mwm_get_focused_client();
 
-	if(client) {
-		kbptr_move(mwm, client, dir);
+	if (client) {
+		kbptr_move(client, dir);
 	}
 
 	return;
 }
 
-static void _cmd_kbptr_click(struct mwm *mwm, void *arg)
+static void _cmd_kbptr_click(void *arg)
 {
 	struct client *client;
 	long button;
 
 	button = (long)arg;
-	client = mwm_get_focused_client(mwm);
+	client = mwm_get_focused_client();
 
-	if(client) {
-		kbptr_click(mwm, client, button);
+	if (client) {
+		kbptr_click(client, button);
 	}
 
 	return;
@@ -872,12 +878,12 @@ static int _xerror_startup(Display *display, XErrorEvent *event)
 {
 	fprintf(stderr, "Looks like I'm not your only window manager\n");
 	exit(1);
-	return(-1);
+	return -1;
 }
 
 static int _xerror_nop(Display *display, XErrorEvent *event)
 {
-	return(0);
+	return 0;
 }
 
 static int _can_ignore_error(XErrorEvent *event)
@@ -897,96 +903,96 @@ static int _can_ignore_error(XErrorEvent *event)
 	};
 	int i;
 
-	if(event->error_code == BadWindow) {
-		return(1);
+	if (event->error_code == BadWindow) {
+		return 1;
 	}
 
-	for(i = 0; i < (sizeof(ignore_ok) / sizeof(ignore_ok[0])); i++) {
-		if(event->request_code == ignore_ok[i].request_code &&
-		   event->error_code == ignore_ok[i].error_code) {
-			return(1);
+	for (i = 0; i < (sizeof(ignore_ok) / sizeof(ignore_ok[0])); i++) {
+		if (event->request_code == ignore_ok[i].request_code &&
+		    event->error_code == ignore_ok[i].error_code) {
+			return 1;
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
 static int _xerror_handle(Display *display, XErrorEvent *event)
 {
-	if(_can_ignore_error(event)) {
-		return(0);
+	if (_can_ignore_error(event)) {
+		return 0;
 	}
 
-	return(__mwm->xerror_default_handler(display, event));
+	return _mwm->xerror_default_handler(display, event);
 }
 
-static void _find_existing_clients(struct mwm *mwm)
+static void _find_existing_clients(void)
 {
         Window dontcare;
         Window *windows;
         Window *cur;
         unsigned int num_windows;
 
-        if(!XQueryTree(mwm->display, mwm->root, &dontcare, &dontcare, &windows, &num_windows)) {
+        if (!XQueryTree(_mwm->display, _mwm->root, &dontcare, &dontcare, &windows, &num_windows)) {
                 return;
         }
 
-        for(cur = windows; cur < windows + num_windows; cur++) {
-                XWindowAttributes attrs;
+        for (cur = windows; cur < windows + num_windows; cur++) {
+	        XWindowAttributes attrs;
 
-                if(!XGetWindowAttributes(mwm->display, *cur, &attrs)) {
+	        if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
                         continue;
                 }
 
-                if(attrs.override_redirect || XGetTransientForHint(mwm->display, *cur, &dontcare)) {
+                if (attrs.override_redirect || XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
                         continue;
                 }
 
-                if(attrs.map_state == IsViewable /* || IconicState */ ) {
+                if (attrs.map_state == IsViewable /* || IconicState */ ) {
                         struct client *client;
                         int err;
 
-                        if((err = client_new(*cur, &attrs, &client)) < 0) {
+                        if ((err = client_new(*cur, &attrs, &client)) < 0) {
                                 fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
-                        } else if((err = mwm_attach_client(mwm, client)) < 0) {
+                        } else if ((err = mwm_attach_client(client)) < 0) {
                                 fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
                                 client_free(&client);
                         }
                 }
         }
 
-        for(cur = windows; cur < windows + num_windows; cur++) {
+        for (cur = windows; cur < windows + num_windows; cur++) {
                 XWindowAttributes attrs;
 
-                if(!XGetWindowAttributes(mwm->display, *cur, &attrs)) {
+                if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
                         continue;
                 }
 
-                if(!XGetTransientForHint(mwm->display, *cur, &dontcare)) {
+                if (!XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
                         continue;
                 }
 
-                if(attrs.map_state == IsViewable /* || IconicState */ ) {
+                if (attrs.map_state == IsViewable /* || IconicState */ ) {
                         struct client *client;
                         int err;
 
-                        if((err = client_new(*cur, &attrs, &client)) < 0) {
+                        if ((err = client_new(*cur, &attrs, &client)) < 0) {
                                 fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
-                        } else if((err = mwm_attach_client(mwm, client)) < 0) {
+                        } else if ((err = mwm_attach_client(client)) < 0) {
                                 fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
                                 client_free(&client);
                         }
                 }
         }
 
-        if(windows) {
+        if (windows) {
                 XFree(windows);
         }
 
         return;
 }
 
-int mwm_init(struct mwm *mwm)
+int mwm_init(void)
 {
 	extern struct theme config_theme;
 	PangoContext *context;
@@ -996,31 +1002,35 @@ int mwm_init(struct mwm *mwm)
 	int err;
 	int i;
 
-	if(!mwm) {
-		return(-EINVAL);
+	if (_mwm) {
+		return -EALREADY;
 	}
 
-	mwm->display = XOpenDisplay(NULL);
+	if ((err = mwm_new(&_mwm)) < 0) {
+		return err;
+	}
 
-	if(!mwm->display) {
-		return(-EIO);
+	_mwm->display = XOpenDisplay(NULL);
+
+	if (!_mwm->display) {
+		return -EIO;
 	}
 
 	_sigchld(0);
 
-	mwm->screen = DefaultScreen(mwm->display);
-	mwm->root = RootWindow(mwm->display, mwm->screen);
-	mwm->xerror_default_handler = XSetErrorHandler(_xerror_startup);
+	_mwm->screen = DefaultScreen(_mwm->display);
+	_mwm->root = RootWindow(_mwm->display, _mwm->screen);
+	_mwm->xerror_default_handler = XSetErrorHandler(_xerror_startup);
 
-	if(!mwm->xerror_default_handler) {
-		return(-EIO);
+	if (!_mwm->xerror_default_handler) {
+		return -EIO;
 	}
 
-	for (i = 0; i < (sizeof(mwm->atoms) / sizeof(mwm->atoms[0])); i++) {
-		mwm_get_atom_by_name(mwm, _mwm_atom_names[i], &mwm->atoms[i]);
+	for (i = 0; i < (sizeof(_mwm->atoms) / sizeof(_mwm->atoms[0])); i++) {
+		mwm_get_atom_by_name(_mwm_atom_names[i], &_mwm->atoms[i]);
 	}
 
-	if ((err = xrandr_new(&mwm->xrandr, mwm->display, mwm->root)) < 0) {
+	if ((err = xrandr_new(&_mwm->xrandr, _mwm->display, _mwm->root)) < 0) {
 		switch (err) {
 		case -ENOTSUP:
 			fprintf(stderr, "XRandR is required but not supported by the X server\n");
@@ -1038,14 +1048,14 @@ int mwm_init(struct mwm *mwm)
 		return err;
 	}
 
-	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_ATTACHED,
-	                    (xrandr_func_t*)_attach_monitor, mwm);
-	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_DETACHED,
-	                    (xrandr_func_t*)_detach_monitor, mwm);
-	xrandr_set_callback(mwm->xrandr, XRANDR_MONITOR_GEOMETRY_CHANGED,
-			    (xrandr_func_t*)_change_monitor_geometry, mwm);
+	xrandr_set_callback(_mwm->xrandr, XRANDR_MONITOR_ATTACHED,
+	                    (xrandr_func_t*)_attach_monitor, NULL);
+	xrandr_set_callback(_mwm->xrandr, XRANDR_MONITOR_DETACHED,
+	                    (xrandr_func_t*)_detach_monitor, NULL);
+	xrandr_set_callback(_mwm->xrandr, XRANDR_MONITOR_GEOMETRY_CHANGED,
+	                    (xrandr_func_t*)_change_monitor_geometry, NULL);
 
-	XSelectInput(mwm->display, mwm->root,
+	XSelectInput(_mwm->display, _mwm->root,
 		     SubstructureRedirectMask |
 		     SubstructureNotifyMask |
 		     PointerMotionMask |
@@ -1053,88 +1063,88 @@ int mwm_init(struct mwm *mwm)
 		     LeaveWindowMask |
 		     StructureNotifyMask |
 		     PropertyChangeMask);
-	XSync(mwm->display, False);
+	XSync(_mwm->display, False);
 
 	XSetErrorHandler(_xerror_handle);
-	XSync(mwm->display, False);
+	XSync(_mwm->display, False);
 
-	mwm_grab_keys(mwm);
+	mwm_grab_keys();
 
-	x_configure_notify(mwm->display, mwm->root, NULL, 0);
+	x_configure_notify(_mwm->display, _mwm->root, NULL, 0);
 
-	fontmap = pango_xft_get_font_map(mwm->display, mwm->screen);
+	fontmap = pango_xft_get_font_map(_mwm->display, _mwm->screen);
 	fontdesc = pango_font_description_from_string(config_theme.statusbar_font);
 
 	/* set up the pango context/layout for horizontal text */
 	context = pango_font_map_create_context(fontmap);
-	mwm->font.layout = pango_layout_new(context);
-	pango_layout_set_font_description(mwm->font.layout, fontdesc);
+	_mwm->font.layout = pango_layout_new(context);
+	pango_layout_set_font_description(_mwm->font.layout, fontdesc);
 	fontmetrics = pango_context_get_metrics(context, fontdesc, NULL);
 	g_object_unref(context);
 
-	mwm->font.ascent = pango_font_metrics_get_ascent(fontmetrics) / PANGO_SCALE;
-	mwm->font.descent = pango_font_metrics_get_descent(fontmetrics) / PANGO_SCALE;
-	mwm->font.height = mwm->font.ascent + mwm->font.descent;
+	_mwm->font.ascent = pango_font_metrics_get_ascent(fontmetrics) / PANGO_SCALE;
+	_mwm->font.descent = pango_font_metrics_get_descent(fontmetrics) / PANGO_SCALE;
+	_mwm->font.height = _mwm->font.ascent + _mwm->font.descent;
 	pango_font_metrics_unref(fontmetrics);
 
 	/* set up the pango context/layout for vertical text */
 	context = pango_font_map_create_context(fontmap);
-	mwm->font.vlayout = pango_layout_new(context);
-	pango_layout_set_font_description(mwm->font.vlayout, fontdesc);
+	_mwm->font.vlayout = pango_layout_new(context);
+	pango_layout_set_font_description(_mwm->font.vlayout, fontdesc);
 	g_object_unref(context);
 
-	_palette_init(mwm, &(mwm->palette[MWM_PALETTE_ACTIVE]),
+	_palette_init(&(_mwm->palette[MWM_PALETTE_ACTIVE]),
 		      &config_theme.active);
-	_palette_init(mwm, &(mwm->palette[MWM_PALETTE_INACTIVE]),
+	_palette_init(&(_mwm->palette[MWM_PALETTE_INACTIVE]),
 		      &config_theme.inactive);
 
-	mwm->commands[MWM_CMD_QUIT] = _cmd_quit;
-	mwm->commands[MWM_CMD_SPAWN] = _cmd_spawn;
-	mwm->commands[MWM_CMD_SHOW_WORKSPACE] = _cmd_show_workspace;
-	mwm->commands[MWM_CMD_MOVE_TO_WORKSPACE] = _cmd_move_to_workspace;
-	mwm->commands[MWM_CMD_SET_LAYOUT] = _cmd_set_layout;
-	mwm->commands[MWM_CMD_SHIFT_FOCUS] = _cmd_shift_focus;
-	mwm->commands[MWM_CMD_SHIFT_CLIENT] = _cmd_shift_client;
-	mwm->commands[MWM_CMD_SHIFT_MONITOR_FOCUS] = _cmd_shift_monitor_focus;
-	mwm->commands[MWM_CMD_SHIFT_WORKSPACE] = _cmd_shift_workspace;
-	mwm->commands[MWM_CMD_KBPTR_MOVE] = _cmd_kbptr_move;
-	mwm->commands[MWM_CMD_KBPTR_CLICK] = _cmd_kbptr_click;
+	_mwm->commands[MWM_CMD_QUIT] = _cmd_quit;
+	_mwm->commands[MWM_CMD_SPAWN] = _cmd_spawn;
+	_mwm->commands[MWM_CMD_SHOW_WORKSPACE] = _cmd_show_workspace;
+	_mwm->commands[MWM_CMD_MOVE_TO_WORKSPACE] = _cmd_move_to_workspace;
+	_mwm->commands[MWM_CMD_SET_LAYOUT] = _cmd_set_layout;
+	_mwm->commands[MWM_CMD_SHIFT_FOCUS] = _cmd_shift_focus;
+	_mwm->commands[MWM_CMD_SHIFT_CLIENT] = _cmd_shift_client;
+	_mwm->commands[MWM_CMD_SHIFT_MONITOR_FOCUS] = _cmd_shift_monitor_focus;
+	_mwm->commands[MWM_CMD_SHIFT_WORKSPACE] = _cmd_shift_workspace;
+	_mwm->commands[MWM_CMD_KBPTR_MOVE] = _cmd_kbptr_move;
+	_mwm->commands[MWM_CMD_KBPTR_CLICK] = _cmd_kbptr_click;
 
-	xrandr_update(mwm->xrandr);
-	_find_existing_clients(mwm);
+	xrandr_update(_mwm->xrandr);
+	_find_existing_clients();
 
-	return(0);
+	return 0;
 }
 
-int mwm_render_text(struct mwm *mwm, XftDraw *drawable,
+int mwm_render_text(XftDraw *drawable,
                     mwm_palette_t palette, const char *text,
                     const int x, const int y,
                     const int w, const int h)
 {
 	XftColor *color;
 
-	if(!mwm || !drawable || !text) {
-		return(-EINVAL);
+	if (!drawable || !text) {
+		return -EINVAL;
 	}
 
-	color = &mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
+	color = &_mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
 
-	pango_layout_set_attributes(mwm->font.layout, NULL);
-	pango_layout_set_width(mwm->font.layout, w * PANGO_SCALE);
-	pango_layout_set_height(mwm->font.layout, h * PANGO_SCALE);
-	pango_layout_set_ellipsize(mwm->font.layout, PANGO_ELLIPSIZE_END);
-	pango_layout_set_wrap(mwm->font.layout, PANGO_WRAP_CHAR);
+	pango_layout_set_attributes(_mwm->font.layout, NULL);
+	pango_layout_set_width(_mwm->font.layout, w * PANGO_SCALE);
+	pango_layout_set_height(_mwm->font.layout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(_mwm->font.layout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(_mwm->font.layout, PANGO_WRAP_CHAR);
 
-	pango_layout_set_markup(mwm->font.layout, text, -1);
+	pango_layout_set_markup(_mwm->font.layout, text, -1);
 	pango_xft_render_layout(drawable, color,
-				mwm->font.layout,
+				_mwm->font.layout,
 				x * PANGO_SCALE,
 				y * PANGO_SCALE);
 
-	return(0);
+	return 0;
 }
 
-int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
+int mwm_render_text_vertical(XftDraw *drawable,
                              mwm_palette_t palette, const char *text,
                              const int x, const int y,
                              const int w, const int h)
@@ -1144,40 +1154,40 @@ int mwm_render_text_vertical(struct mwm *mwm, XftDraw *drawable,
 	XftColor *color;
 	PangoRectangle extents;
 
-	if(!mwm || ! drawable || !text) {
-		return(-EINVAL);
+	if (!drawable || !text) {
+		return -EINVAL;
 	}
 
-	context = pango_layout_get_context(mwm->font.vlayout);
-	color = &mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
+	context = pango_layout_get_context(_mwm->font.vlayout);
+	color = &_mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
 
 	pango_matrix_translate(&matrix, x, y);
 	pango_matrix_rotate(&matrix, -90.0);
 	pango_context_set_matrix(context, &matrix);
 	pango_context_set_base_gravity(context, PANGO_GRAVITY_EAST);
 
-	pango_layout_set_attributes(mwm->font.vlayout, NULL);
-	pango_layout_set_width(mwm->font.vlayout, w * PANGO_SCALE);
-	pango_layout_set_height(mwm->font.vlayout, h * PANGO_SCALE);
-	pango_layout_set_ellipsize(mwm->font.vlayout, PANGO_ELLIPSIZE_END);
-	pango_layout_set_wrap(mwm->font.vlayout, PANGO_WRAP_CHAR);
-	pango_layout_set_markup(mwm->font.vlayout, text, -1);
-	pango_layout_get_extents(mwm->font.vlayout, NULL, &extents);
+	pango_layout_set_attributes(_mwm->font.vlayout, NULL);
+	pango_layout_set_width(_mwm->font.vlayout, w * PANGO_SCALE);
+	pango_layout_set_height(_mwm->font.vlayout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(_mwm->font.vlayout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(_mwm->font.vlayout, PANGO_WRAP_CHAR);
+	pango_layout_set_markup(_mwm->font.vlayout, text, -1);
+	pango_layout_get_extents(_mwm->font.vlayout, NULL, &extents);
 
-	pango_xft_render_layout(drawable, color, mwm->font.vlayout,
+	pango_xft_render_layout(drawable, color, _mwm->font.vlayout,
 				0, -1.0 * extents.height);
 
-	return(0);
+	return 0;
 }
 
-int mwm_run(struct mwm *mwm)
+int mwm_run(void)
 {
 	XEvent event;
 
-	XSync(mwm->display, False);
-	mwm->running = 1;
+	XSync(_mwm->display, False);
+	_mwm->running = 1;
 
-	while(mwm->running) {
+	while (_mwm->running) {
 		struct client *focused_client;
 
 		/*
@@ -1190,153 +1200,149 @@ int mwm_run(struct mwm *mwm)
 		 */
 
 		do {
-			if(XNextEvent(mwm->display, &event) == 0) {
-				if (event.type < (sizeof(mwm->xhandler) / sizeof(mwm->xhandler[0]))) {
-					if(mwm->xhandler[event.type]) {
-						mwm->xhandler[event.type](mwm, &event);
+			if (XNextEvent(_mwm->display, &event) == 0) {
+				if (event.type < (sizeof(_mwm->xhandler) / sizeof(_mwm->xhandler[0]))) {
+					if (_mwm->xhandler[event.type]) {
+						_mwm->xhandler[event.type](&event);
 					}
 				} else {
-					xrandr_handle_event(mwm->xrandr, &event);
+					xrandr_handle_event(_mwm->xrandr, &event);
 				}
 			}
-		} while(XEventsQueued(mwm->display, QueuedAfterFlush) > 0);
+		} while (XEventsQueued(_mwm->display, QueuedAfterFlush) > 0);
 
-		if (mwm->next_monitor && mwm->next_monitor != mwm->current_monitor) {
-			monitor_needs_redraw(mwm->current_monitor);
-			monitor_needs_redraw(mwm->next_monitor);
+		if (_mwm->next_monitor && _mwm->next_monitor != _mwm->current_monitor) {
+			monitor_needs_redraw(_mwm->current_monitor);
+			monitor_needs_redraw(_mwm->next_monitor);
 
-			mwm->current_monitor = mwm->next_monitor;
-			mwm->next_monitor = NULL;
+			_mwm->current_monitor = _mwm->next_monitor;
+			_mwm->next_monitor = NULL;
 		}
 
-		if(mwm->needs_redraw) {
-			mwm_redraw(mwm);
+		if (_mwm->needs_redraw) {
+			mwm_redraw();
 		}
 
-		focused_client = mwm_get_focused_client(mwm);
+		focused_client = mwm_get_focused_client();
 
-		if(mwm->focused_client != focused_client) {
+		if (_mwm->focused_client != focused_client) {
 			client_focus(focused_client);
-			mwm->focused_client = focused_client;
+			_mwm->focused_client = focused_client;
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
-int mwm_stop(struct mwm *mwm)
+int mwm_stop(void)
 {
-	if(!mwm) {
-		return(-EINVAL);
+	if (!_mwm->running) {
+		return -EALREADY;
 	}
 
-	if(!mwm->running) {
-		return(-EALREADY);
-	}
+	_mwm->running = 0;
 
-	mwm->running = 0;
-
-	return(0);
+	return 0;
 }
 
-int mwm_attach_monitor(struct mwm *mwm, struct monitor *mon)
+int mwm_attach_monitor(struct monitor *mon)
 {
 	struct workspace *unviewed;
 
-	if(!mwm || !mon) {
+	if (!mon) {
 		return(-EINVAL);
 	}
 
-	if(loop_append(&mwm->monitors, mon) < 0) {
-		return(-ENOMEM);
+	if (loop_append(&_mwm->monitors, mon) < 0) {
+		return -ENOMEM;
 	}
 
-	if(!mwm_get_focused_monitor(mwm)) {
-		mwm_focus_monitor(mwm, mon);
+	if (!mwm_get_focused_monitor()) {
+		mwm_focus_monitor(mon);
 	}
 
-	if(loop_find(&mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, NULL, (void**)&unviewed) < 0) {
-		return(-EFAULT);
+	if (loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, NULL, (void**)&unviewed) < 0) {
+		return -EFAULT;
 	}
 
 	monitor_set_workspace(mon, unviewed);
 
-	return(0);
+	return 0;
 }
 
-int mwm_detach_monitor(struct mwm *mwm, struct monitor *mon)
+int mwm_detach_monitor(struct monitor *mon)
 {
 	struct workspace *workspace;
 	struct monitor *next_monitor;
 
 	next_monitor = NULL;
 
-	if(!mwm || !mon) {
-		return(-EINVAL);
+	if (!mon) {
+		return -EINVAL;
 	}
 
-	loop_get_next(&mwm->monitors, mon, (void**)&next_monitor);
+	loop_get_next(&_mwm->monitors, mon, (void**)&next_monitor);
 
-	if(loop_remove(&mwm->monitors, mon) < 0) {
-		return(-ENODEV);
+	if(loop_remove(&_mwm->monitors, mon) < 0) {
+		return -ENODEV;
 	}
 
-	if (mwm->current_monitor == mon) {
+	if (_mwm->current_monitor == mon) {
 #if MWM_DEBUG
 		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
 		        __func__, (void*)mon, (void*)next_monitor);
 #endif /* MWM_DEBUG */
-		mwm_focus_monitor(mwm, next_monitor);
+		mwm_focus_monitor(next_monitor);
 	}
 
 	workspace = monitor_get_workspace(mon);
 	workspace_set_viewer(workspace, NULL);
 
-	return(0);
+	return 0;
 }
 
-int mwm_focus_monitor(struct mwm *mwm, struct monitor *monitor)
+int mwm_focus_monitor(struct monitor *monitor)
 {
-	if (!mwm || !monitor) {
+	if (!monitor) {
 		return(-EINVAL);
 	}
 
 #if MWM_DEBUG
-		fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
+	fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
 #endif /* MWM_DEBUG */
-	mwm->next_monitor = monitor;
+	_mwm->next_monitor = monitor;
 
 	return 0;
 }
 
-struct monitor* mwm_get_focused_monitor(struct mwm *mwm)
+struct monitor* mwm_get_focused_monitor(void)
 {
-	return(mwm->current_monitor);
+	return(_mwm->current_monitor);
 }
 
-int mwm_attach_client(struct mwm *mwm, struct client *client)
+int mwm_attach_client(struct client *client)
 {
 	struct workspace *workspace;
 
-	if(!mwm || !client) {
-		return(-EINVAL);
+	if (!client) {
+		return -EINVAL;
 	}
 
 	workspace = NULL;
 
-	if(mwm->current_monitor) {
-		workspace = monitor_get_workspace(mwm->current_monitor);
+	if (_mwm->current_monitor) {
+		workspace = monitor_get_workspace(_mwm->current_monitor);
 	}
 
-	if(!workspace) {
+	if (!workspace) {
 		/*
 		 * there's a chance that we might be attaching clients
 		 * before the first monitor has been detected
 		 */
 
-		if(loop_get_first(&mwm->workspaces, (void**)&workspace) < 0) {
+		if (loop_get_first(&_mwm->workspaces, (void**)&workspace) < 0) {
 			/* this really shouldn't happen */
-			return(-EFAULT);
+			return -EFAULT;
 		}
 	}
 
@@ -1345,42 +1351,37 @@ int mwm_attach_client(struct mwm *mwm, struct client *client)
 		(void*)client, (void*)workspace);
 #endif /* MWM_DEBUG */
 
-        XSelectInput(mwm->display, client_get_window(client),
-		     EnterWindowMask | FocusChangeMask |
-		     PropertyChangeMask | StructureNotifyMask);
+        XSelectInput(_mwm->display, client_get_window(client),
+                     EnterWindowMask | FocusChangeMask |
+                     PropertyChangeMask | StructureNotifyMask);
 
 	client_set_state(client, NormalState);
 
-	return(workspace_attach_client(workspace, client));
+	return workspace_attach_client(workspace, client);
 }
 
-int mwm_detach_client(struct mwm *mwm, struct client *client)
+int mwm_detach_client(struct client *client)
 {
 	struct workspace *workspace;
 
-	if(!mwm || !client) {
-		return(-EINVAL);
+	if (!client) {
+		return -EINVAL;
 	}
 
 	workspace = client_get_workspace(client);
-
 	workspace_detach_client(workspace, client);
 
-	return(0);
+	return 0;
 }
 
-int mwm_focus_client(struct mwm *mwm, struct client *client)
+int mwm_focus_client(struct client *client)
 {
 	struct workspace *workspace;
-
-	if(!mwm) {
-		return(-EINVAL);
-	}
 
 	if(client) {
 		workspace = client_get_workspace(client);
 	} else {
-		workspace = mwm_get_focused_workspace(mwm);
+		workspace = mwm_get_focused_workspace();
 	}
 
 	if(!workspace) {
@@ -1390,11 +1391,11 @@ int mwm_focus_client(struct mwm *mwm, struct client *client)
 	return(workspace_focus_client(workspace, client));
 }
 
-struct client* mwm_get_focused_client(struct mwm *mwm)
+struct client* mwm_get_focused_client(void)
 {
 	struct monitor *focused_monitor;
 
-	focused_monitor = mwm_get_focused_monitor(mwm);
+	focused_monitor = mwm_get_focused_monitor();
 
 	if(!focused_monitor) {
 		return(NULL);
@@ -1418,7 +1419,7 @@ int _find_client_in_workspace(struct workspace *workspace, struct find_client_ar
 	return args->err == 0 ? -1 : 0;
 }
 
-int mwm_find_client(struct mwm *mwm, int(*cmp)(struct client*, void*),
+int mwm_find_client(int(*cmp)(struct client*, void*),
 		    void *data, struct client **client)
 {
 	struct find_client_args args;
@@ -1428,43 +1429,34 @@ int mwm_find_client(struct mwm *mwm, int(*cmp)(struct client*, void*),
 	args.dst = client;
 	args.err = -ENOENT;
 
-	if(!mwm) {
-		return(-EINVAL);
-	}
-
-	loop_foreach_with_data(&mwm->workspaces, (int(*)(void*, void*))_find_client_in_workspace,
+	loop_foreach_with_data(&_mwm->workspaces, (int(*)(void*, void*))_find_client_in_workspace,
 	                       &args);
 
 	return args.err;
 }
 
-struct workspace *mwm_get_focused_workspace(struct mwm *mwm)
+struct workspace *mwm_get_focused_workspace(void)
 {
 	struct monitor *monitor;
 	struct workspace *workspace;
 
 	workspace = NULL;
-	monitor = mwm_get_focused_monitor(mwm);
+	monitor = mwm_get_focused_monitor();
 
-	if(monitor) {
+	if (monitor) {
 		workspace = monitor_get_workspace(monitor);
 	}
 
-	return(workspace);
+	return workspace;
 }
 
-int mwm_foreach_workspace(struct mwm *mwm,
-			  int (*func)(struct mwm*, struct workspace*, void*),
-			  void *data)
+int mwm_foreach_workspace(int (*func)(struct workspace*, void*),
+                          void *data)
 {
 	loop_iter_t first;
 	loop_iter_t cur;
 
-	if(!mwm) {
-		return(-EINVAL);
-	}
-
-	first = loop_get_iter(&mwm->workspaces);
+	first = loop_get_iter(&_mwm->workspaces);
 	cur = first;
 
 	do {
@@ -1472,7 +1464,7 @@ int mwm_foreach_workspace(struct mwm *mwm,
 
 		workspace = (struct workspace*)loop_iter_get_data(cur);
 
-		if(func(mwm, workspace, data) < 0) {
+		if(func(workspace, data) < 0) {
 			break;
 		}
 		cur = loop_iter_get_next(cur);
@@ -1481,34 +1473,25 @@ int mwm_foreach_workspace(struct mwm *mwm,
 	return(0);
 }
 
-int mwm_needs_redraw(struct mwm *mwm)
+int mwm_needs_redraw(void)
 {
-	if(!mwm) {
-		return(-EINVAL);
-	}
-
-	mwm->needs_redraw = 1;
+	_mwm->needs_redraw = 1;
 	return(0);
 }
 
-int mwm_redraw(struct mwm *mwm)
+int mwm_redraw(void)
 {
-	if(!mwm) {
-		return(-EINVAL);
-	}
-
-	if(mwm->needs_redraw) {
-		loop_foreach(&mwm->monitors, (void(*)(void*))monitor_redraw);
-		loop_foreach(&mwm->workspaces, (void(*)(void*))workspace_redraw);
-		mwm->needs_redraw = 0;
+	if(_mwm->needs_redraw) {
+		loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_redraw);
+		loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_redraw);
+		_mwm->needs_redraw = 0;
 	}
 
 	return(0);
 }
 
-Window mwm_create_window(struct mwm *mwm, const int x, const int y, const int w, const int h)
+Window mwm_create_window(const int x, const int y, const int w, const int h)
 {
-	Window window;
 	XSetWindowAttributes attrs;
 	int depth;
 	Visual *visual;
@@ -1519,90 +1502,88 @@ Window mwm_create_window(struct mwm *mwm, const int x, const int y, const int w,
 	attrs.event_mask = ExposureMask;
 
 	mask = CWOverrideRedirect | CWBackPixmap | CWEventMask;
-	depth = DefaultDepth(mwm->display, mwm->screen);
-	visual = DefaultVisual(mwm->display, mwm->screen);
+	depth = DefaultDepth(_mwm->display, _mwm->screen);
+	visual = DefaultVisual(_mwm->display, _mwm->screen);
 
-	window = XCreateWindow(mwm->display, mwm->root, x, y, w, h, 0,
-			       depth, CopyFromParent, visual, mask, &attrs);
-
-	return(window);
+	return XCreateWindow(_mwm->display, _mwm->root, x, y, w, h, 0,
+	                     depth, CopyFromParent, visual, mask, &attrs);
 }
 
-GC mwm_create_gc(struct mwm *mwm)
+GC mwm_create_gc(void)
 {
 	GC context;
 
-	context = XCreateGC(mwm->display, mwm->root, 0, NULL);
+	context = XCreateGC(_mwm->display, _mwm->root, 0, NULL);
 
-	XSetLineAttributes(mwm->display, context, 1, LineSolid, CapButt, JoinMiter);
+	XSetLineAttributes(_mwm->display, context, 1, LineSolid, CapButt, JoinMiter);
 
-	return(context);
+	return context;
 }
 
-XftDraw* mwm_create_xft_context(struct mwm *mwm, Drawable drawable)
+XftDraw* mwm_create_xft_context(Drawable drawable)
 {
-	return(XftDrawCreate(mwm->display, drawable,
-			     DefaultVisual(mwm->display, mwm->screen),
-			     DefaultColormap(mwm->display, mwm->screen)));
+	return XftDrawCreate(_mwm->display, drawable,
+	                     DefaultVisual(_mwm->display, _mwm->screen),
+	                     DefaultColormap(_mwm->display, _mwm->screen));
 }
 
-Drawable mwm_create_pixmap(struct mwm *mwm, Window window, const int width, const int height)
+Drawable mwm_create_pixmap(Window window, const int width, const int height)
 {
-	return(XCreatePixmap(mwm->display, window ? window : mwm->root, width, height,
-			     DefaultDepth(mwm->display, mwm->screen)));
+	return(XCreatePixmap(_mwm->display, window ? window : _mwm->root, width, height,
+			     DefaultDepth(_mwm->display, _mwm->screen)));
 }
 
-void mwm_free_pixmap(struct mwm *mwm, Drawable drawable)
+void mwm_free_pixmap(Drawable drawable)
 {
-	XFreePixmap(mwm->display, drawable);
+	XFreePixmap(_mwm->display, drawable);
 	return;
 }
 
-int mwm_get_font_height(struct mwm *mwm)
+int mwm_get_font_height(void)
 {
-	return(mwm->font.height);
+	return _mwm->font.height;
 }
 
-int mwm_get_text_width(struct mwm *mwm, const char *text)
+int mwm_get_text_width(const char *text)
 {
 	PangoRectangle extents;
 
-	pango_layout_set_attributes(mwm->font.layout, NULL);
-	pango_layout_set_width(mwm->font.layout, -1);
-	pango_layout_set_height(mwm->font.layout, -1);
-	pango_layout_set_markup(mwm->font.layout, text, -1);
-	pango_layout_get_extents(mwm->font.layout, 0, &extents);
+	pango_layout_set_attributes(_mwm->font.layout, NULL);
+	pango_layout_set_width(_mwm->font.layout, -1);
+	pango_layout_set_height(_mwm->font.layout, -1);
+	pango_layout_set_markup(_mwm->font.layout, text, -1);
+	pango_layout_get_extents(_mwm->font.layout, 0, &extents);
 
-	return(extents.width / PANGO_SCALE);
+	return extents.width / PANGO_SCALE;
 }
 
-unsigned long mwm_get_color(struct mwm *mwm, mwm_palette_t palette, mwm_color_t color)
+unsigned long mwm_get_color(mwm_palette_t palette, mwm_color_t color)
 {
-	return(mwm->palette[palette].color[color]);
+	return _mwm->palette[palette].color[color];
 }
 
-int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char **dst)
+int mwm_get_text_property(Window window, Atom atom, char **dst)
 {
 	XTextProperty property;
 	int len;
 	Atom UTF8_STRING;
 
-	if (!mwm || !dst) {
+	if (!dst) {
 		return -EINVAL;
 	}
 
-	if (mwm_get_atom(mwm, MWM_ATOM_UTF8, &UTF8_STRING) < 0) {
+	if (mwm_get_atom(MWM_ATOM_UTF8, &UTF8_STRING) < 0) {
 		return -EIO;
 	}
 
-	XGetTextProperty(mwm->display, window, &property, atom);
+	XGetTextProperty(_mwm->display, window, &property, atom);
 
 	if(property.nitems == 0) {
 		return(-ENOENT);
 	}
 
-	if(property.encoding == XA_STRING ||
-	   property.encoding == UTF8_STRING) {
+	if (property.encoding == XA_STRING ||
+	    property.encoding == UTF8_STRING) {
 		char *dup;
 
 		if (!(dup = strdup((char*)property.value))) {
@@ -1616,17 +1597,17 @@ int mwm_get_text_property(struct mwm *mwm, Window window, Atom atom, char **dst)
 	}
 
 	XFree(property.value);
-	return(len);
+	return len;
 }
 
-int mwm_get_status(struct mwm *mwm, char **buffer)
+int mwm_get_status(char **buffer)
 {
 	char *status;
 	int len;
 
 	status = NULL;
 
-	if ((len = mwm_get_text_property(mwm, mwm->root, XA_WM_NAME, &status)) < 0) {
+	if ((len = mwm_get_text_property(_mwm->root, XA_WM_NAME, &status)) < 0) {
 		if (!(status = strdup("mwm-0.1"))) {
 			return -ENOMEM;
 		}
@@ -1636,32 +1617,28 @@ int mwm_get_status(struct mwm *mwm, char **buffer)
 	return 0;
 }
 
-int mwm_grab_keys(struct mwm *mwm)
+int mwm_grab_keys(void)
 {
 	extern struct key_binding config_keybindings[];
 	struct key_binding *binding;
 
-	if(!mwm) {
-		return(-EINVAL);
-	}
+	XUngrabKey(_mwm->display, AnyKey, AnyModifier, _mwm->root);
 
-	XUngrabKey(mwm->display, AnyKey, AnyModifier, mwm->root);
-
-	for(binding = config_keybindings; binding->cmd < MWM_CMD_MAX; binding++) {
+	for (binding = config_keybindings; binding->cmd < MWM_CMD_MAX; binding++) {
 		KeyCode code;
 
-		code = XKeysymToKeycode(mwm->display, binding->key);
+		code = XKeysymToKeycode(_mwm->display, binding->key);
 
-		XGrabKey(mwm->display, code, binding->mod,
-			 mwm->root, True, GrabModeAsync, GrabModeAsync);
-		XGrabKey(mwm->display, code, binding->mod | LockMask,
-			 mwm->root, True, GrabModeAsync, GrabModeAsync);
+		XGrabKey(_mwm->display, code, binding->mod,
+			 _mwm->root, True, GrabModeAsync, GrabModeAsync);
+		XGrabKey(_mwm->display, code, binding->mod | LockMask,
+			 _mwm->root, True, GrabModeAsync, GrabModeAsync);
 	}
 
-	return(0);
+	return 0;
 }
 
-int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
+int mwm_cmd(mwm_cmd_t cmd, void *data)
 {
 #ifdef MWM_DEBUG
 	static const char *cmd_names[] = {
@@ -1685,40 +1662,40 @@ int mwm_cmd(struct mwm *mwm, mwm_cmd_t cmd, void *data)
 		nameidx = cmd;
 	}
 
-	fprintf(stderr, "%s(%p, %d [%s], %p)\n", __func__, (void*)mwm,
+	fprintf(stderr, "%s(%d [%s], %p)\n", __func__,
 		cmd, cmd_names[nameidx], data);
 #endif /* MWM_DEBUG */
 
-	if(!mwm || cmd < 0 || cmd >= MWM_CMD_MAX) {
+	if (cmd < 0 || cmd >= MWM_CMD_MAX) {
 		return(-EINVAL);
 	}
 
-	if(!mwm->commands[cmd]) {
+	if (!_mwm->commands[cmd]) {
 		return(-ENOSYS);
 	}
 
-	mwm->commands[cmd](mwm, data);
-	return(0);
+	_mwm->commands[cmd](data);
+	return 0;
 }
 
-int mwm_get_atom_by_name(struct mwm *mwm, const char *name, Atom *dst)
+int mwm_get_atom_by_name(const char *name, Atom *dst)
 {
 	Atom atom;
 
-	if (!mwm || !name || !dst) {
+	if (!name || !dst) {
 		return -EINVAL;
 	}
 
 	/* FIXME: Cache the result */
-	atom = XInternAtom(mwm->display, name, False);
+	atom = XInternAtom(_mwm->display, name, False);
 
 	*dst = atom;
 	return 0;
 }
 
-int mwm_get_atom(struct mwm *mwm, mwm_atom_t atom_id, Atom *dst)
+int mwm_get_atom(mwm_atom_t atom_id, Atom *dst)
 {
-	if (!mwm || !dst) {
+	if (!dst) {
 		return -EINVAL;
 	}
 
@@ -1726,6 +1703,6 @@ int mwm_get_atom(struct mwm *mwm, mwm_atom_t atom_id, Atom *dst)
 		return -EBADSLT;
 	}
 
-	*dst = mwm->atoms[atom_id];
+	*dst = _mwm->atoms[atom_id];
 	return 0;
 }

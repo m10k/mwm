@@ -3,13 +3,12 @@
 
 #include <X11/Xlib.h>
 
-struct mwm;
 struct monitor;
 struct layout;
 struct workspace;
 struct geom;
 
-int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
+int monitor_new(int id, int x, int y, int w, int h,
 		struct monitor **monitor);
 int monitor_free(struct monitor **monitor);
 

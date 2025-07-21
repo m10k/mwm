@@ -41,7 +41,6 @@ struct monitor {
 	struct geom geom;
 	struct workspace *workspace;
 	struct layout *layout;
-	struct mwm *mwm;
 };
 
 extern struct layout *layouts[];
@@ -52,17 +51,16 @@ static const char *_workspace_names[] = {
 
 static void _indicator_update_window(struct indicator *indicator, struct monitor *monitor)
 {
-	if(indicator->window) {
-		XMoveResizeWindow(mwm_get_display(monitor->mwm), indicator->window,
+	if (indicator->window) {
+		XMoveResizeWindow(mwm_get_display(), indicator->window,
 				  indicator->geom.x, indicator->geom.y,
 				  indicator->geom.w, indicator->geom.h);
 	} else {
-		indicator->window = mwm_create_window(monitor->mwm,
-						      indicator->geom.x, indicator->geom.y,
+		indicator->window = mwm_create_window(indicator->geom.x, indicator->geom.y,
 						      indicator->geom.w, indicator->geom.h);
-		indicator->gfx_context = mwm_create_gc(monitor->mwm);
-		indicator->xft_context = mwm_create_xft_context(monitor->mwm, (Drawable)indicator->window);
-		XMapRaised(mwm_get_display(monitor->mwm), indicator->window);
+		indicator->gfx_context = mwm_create_gc();
+		indicator->xft_context = mwm_create_xft_context((Drawable)indicator->window);
+		XMapRaised(mwm_get_display(), indicator->window);
 	}
 
 	return;
@@ -91,7 +89,7 @@ void _indicator_set_visible(struct indicator *indicator, int visible, struct mon
 {
 	Display *display;
 
-	display = mwm_get_display(monitor->mwm);
+	display = mwm_get_display();
 
 	if(visible) {
 		XMoveWindow(display, indicator->window, indicator->geom.x, indicator->geom.y);
@@ -114,9 +112,9 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 	int font_height;
 	int font_padding;
 
-	display = mwm_get_display(monitor->mwm);
-	root = mwm_get_root_window(monitor->mwm);
-	font_height = mwm_get_font_height(monitor->mwm);
+	display = mwm_get_display();
+	root = mwm_get_root_window();
+	font_height = mwm_get_font_height();
 	font_padding = (INDICATOR_HEIGHT - 2 * INDICATOR_PADDING - font_height) / 2;
 
 	XCopyArea(display, root, indicator->window, indicator->gfx_context,
@@ -141,8 +139,8 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		client_get_geometry(focused, &focus_pos);
 		memcpy(&client_pos, &focus_pos, sizeof(client_pos));
 
-		fg_color = mwm_get_color(monitor->mwm, palette, MWM_COLOR_INDICATOR_FILL);
-		bg_color = mwm_get_color(monitor->mwm, palette, MWM_COLOR_INDICATOR_BORDER);
+		fg_color = mwm_get_color(palette, MWM_COLOR_INDICATOR_FILL);
+		bg_color = mwm_get_color(palette, MWM_COLOR_INDICATOR_BORDER);
 
 		if(indicator->orientation == HINDICATOR) {
 			focus_pos.x -= indicator->geom.x;
@@ -162,14 +160,14 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 			       focus_pos.x, focus_pos.y, focus_pos.w, focus_pos.h);
 
 		if(indicator->orientation == HINDICATOR) {
-			mwm_render_text(monitor->mwm, indicator->xft_context,
+			mwm_render_text(indicator->xft_context,
 			                palette, hint,
 					focus_pos.x + font_padding,
 			                focus_pos.y + font_padding,
 			                focus_pos.w - (2 * font_padding),
 			                focus_pos.h - (2 * font_padding));
 		} else {
-			mwm_render_text_vertical(monitor->mwm, indicator->xft_context,
+			mwm_render_text_vertical(indicator->xft_context,
 			                         palette, hint,
 						 focus_pos.x + font_padding,
 			                         focus_pos.y + font_padding,
@@ -210,7 +208,7 @@ int monitor_redraw_indicators(struct monitor *monitor)
 	return(0);
 }
 
-int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
+int monitor_new(int id, int x, int y, int w, int h,
 		struct monitor **monitor)
 {
 	struct monitor *mon;
@@ -223,7 +221,6 @@ int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
 		return -ENOMEM;
 	}
 
-	mon->mwm = mwm;
 	mon->id = id;
 	mon->geom.x = x;
 	mon->geom.y = y;
@@ -231,11 +228,11 @@ int monitor_new(struct mwm *mwm, int id, int x, int y, int w, int h,
 	mon->geom.h = h;
 	mon->layout = layouts[0];
 
-	mon->statusbar = mwm_create_window(mwm, x, y, w, STATUSBAR_HEIGHT);
-	mon->gfx_context = mwm_create_gc(mwm);
-	mon->draw_buffer = mwm_create_pixmap(mwm, 0, w, STATUSBAR_HEIGHT);
-	mon->xft_context = mwm_create_xft_context(mwm, mon->draw_buffer);
-	XMapRaised(mwm_get_display(mwm), mon->statusbar);
+	mon->statusbar = mwm_create_window(x, y, w, STATUSBAR_HEIGHT);
+	mon->gfx_context = mwm_create_gc();
+	mon->draw_buffer = mwm_create_pixmap(0, w, STATUSBAR_HEIGHT);
+	mon->xft_context = mwm_create_xft_context(mon->draw_buffer);
+	XMapRaised(mwm_get_display(), mon->statusbar);
 
 	_indicator_update_geometry(mon);
 
@@ -256,7 +253,7 @@ int monitor_free(struct monitor **monitor)
 		return(-EALREADY);
 	}
 
-	display = mwm_get_display((*monitor)->mwm);
+	display = mwm_get_display();
 
 	XUnmapWindow(display, (*monitor)->statusbar);
 	XDestroyWindow(display, (*monitor)->statusbar);
@@ -270,7 +267,7 @@ int monitor_free(struct monitor **monitor)
 
 Display* monitor_get_display(struct monitor *monitor)
 {
-	return(mwm_get_display(monitor->mwm));
+	return mwm_get_display();
 }
 
 int monitor_get_id(struct monitor *monitor)
@@ -300,11 +297,11 @@ int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 
 	memcpy(&monitor->geom, geom, sizeof(*geom));
 
-	XMoveResizeWindow(mwm_get_display(monitor->mwm), monitor->statusbar,
+	XMoveResizeWindow(mwm_get_display(), monitor->statusbar,
 			  monitor->geom.x, monitor->geom.y,
 			  monitor->geom.w, STATUSBAR_HEIGHT);
-	mwm_free_pixmap(monitor->mwm, monitor->draw_buffer);
-	monitor->draw_buffer = mwm_create_pixmap(monitor->mwm, 0, monitor->geom.w, STATUSBAR_HEIGHT);
+	mwm_free_pixmap(monitor->draw_buffer);
+	monitor->draw_buffer = mwm_create_pixmap(0, monitor->geom.w, STATUSBAR_HEIGHT);
 	XftDrawChange(monitor->xft_context, monitor->draw_buffer);
 
 	_indicator_update_geometry(monitor);
@@ -436,14 +433,14 @@ int monitor_draw_clients(struct monitor *monitor)
 
 int monitor_needs_redraw(struct monitor *monitor)
 {
-	if(!monitor) {
-		return(-EINVAL);
+	if (!monitor) {
+		return -EINVAL;
 	}
 
 	monitor->needs_redraw = 1;
-	mwm_needs_redraw(monitor->mwm);
+	mwm_needs_redraw();
 
-	return(0);
+	return 0;
 }
 
 struct _draw_workspace_data {
@@ -456,7 +453,7 @@ struct _draw_workspace_data {
 	struct workspace *focused_workspace;
 };
 
-static int _draw_workspace_button(struct mwm *mwm, struct workspace *workspace, void *data)
+static int _draw_workspace_button(struct workspace *workspace, void *data)
 {
 	struct _draw_workspace_data *dwdata;
 	mwm_color_t color;
@@ -482,20 +479,20 @@ static int _draw_workspace_button(struct mwm *mwm, struct workspace *workspace, 
 	}
 
 	XSetForeground(dwdata->display, dwdata->monitor->gfx_context,
-		       mwm_get_color(mwm, dwdata->palette, color));
+		       mwm_get_color(dwdata->palette, color));
 
 	XFillRectangle(dwdata->display, dwdata->monitor->draw_buffer,
 		       dwdata->monitor->gfx_context, x, 0,
 		       button_width, STATUSBAR_HEIGHT);
 
-	mwm_render_text(mwm, dwdata->monitor->xft_context, dwdata->palette,
+	mwm_render_text(dwdata->monitor->xft_context, dwdata->palette,
 	                _workspace_names[dwdata->i], x + dwdata->text_padding, dwdata->text_padding,
 	                button_width, button_width);
 
 	/* A workspace necessarily has a focused client if it isn't empty */
 	if(workspace_get_focused_client(workspace)) {
 		XSetForeground(dwdata->display, dwdata->monitor->gfx_context,
-			       mwm_get_color(mwm, dwdata->palette, MWM_COLOR_CLIENT_INDICATOR));
+			       mwm_get_color(dwdata->palette, MWM_COLOR_CLIENT_INDICATOR));
 		XFillRectangle(dwdata->display, dwdata->monitor->draw_buffer,
 			       dwdata->monitor->gfx_context, x + 2, 2, button_width - 4, 2);
 	}
@@ -521,26 +518,26 @@ static int _redraw_statusbar(struct monitor *monitor)
 	}
 
 	status = NULL;
-	display = mwm_get_display(monitor->mwm);
-	focused_monitor = mwm_get_focused_monitor(monitor->mwm);
+	display = mwm_get_display();
+	focused_monitor = mwm_get_focused_monitor();
 
 	/* draw the workspace buttons */
 	dwdata.monitor = monitor;
 	dwdata.display = display;
 	dwdata.palette = focused_monitor == monitor ? MWM_PALETTE_ACTIVE : MWM_PALETTE_INACTIVE;
-	dwdata.text_padding = (STATUSBAR_HEIGHT - mwm_get_font_height(monitor->mwm)) / 2;
-	dwdata.text_width = mwm_get_text_width(monitor->mwm, _workspace_names[0]);
+	dwdata.text_padding = (STATUSBAR_HEIGHT - mwm_get_font_height()) / 2;
+	dwdata.text_width = mwm_get_text_width(_workspace_names[0]);
 	dwdata.i = 0;
 	dwdata.focused_workspace = monitor_get_workspace(monitor);
 
-	mwm_foreach_workspace(monitor->mwm, _draw_workspace_button, &dwdata);
+	mwm_foreach_workspace(_draw_workspace_button, &dwdata);
 
 	workspace_button_width = dwdata.i * (dwdata.text_width + 2 * dwdata.text_padding);
 
-	mwm_get_status(monitor->mwm, &status);
+	mwm_get_status(&status);
 
 	/* right-align the status */
-	status_width = mwm_get_text_width(monitor->mwm, status ? status :  "") +
+	status_width = mwm_get_text_width(status ? status :  "") +
 		dwdata.text_padding * 2;
 	status_x = monitor->geom.w - status_width;
 	status_width_max = monitor->geom.w - workspace_button_width;
@@ -554,19 +551,19 @@ static int _redraw_statusbar(struct monitor *monitor)
 		status_width = monitor->geom.w - status_x;
 	} else if(status_x > workspace_button_width) {
 		XSetForeground(display, monitor->gfx_context,
-			       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_FOCUSED));
+			       mwm_get_color(dwdata.palette, MWM_COLOR_FOCUSED));
 		XFillRectangle(display, monitor->draw_buffer,
 			       monitor->gfx_context, workspace_button_width, 0,
 			       status_x - workspace_button_width, STATUSBAR_HEIGHT);
 	}
 
 	XSetForeground(display, monitor->gfx_context,
-		       mwm_get_color(monitor->mwm, dwdata.palette, MWM_COLOR_BACKGROUND));
+		       mwm_get_color(dwdata.palette, MWM_COLOR_BACKGROUND));
 	XFillRectangle(display, monitor->draw_buffer,
 		       monitor->gfx_context, status_x, 0,
 		       status_width, STATUSBAR_HEIGHT);
 
-	mwm_render_text(monitor->mwm, monitor->xft_context, dwdata.palette, status ? status : "",
+	mwm_render_text(monitor->xft_context, dwdata.palette, status ? status : "",
 	                status_x + dwdata.text_padding, dwdata.text_padding,
 	                status_width_max, STATUSBAR_HEIGHT);
 
@@ -614,5 +611,5 @@ struct layout* monitor_get_layout(struct monitor *monitor)
 
 int monitor_is_focused(struct monitor *monitor)
 {
-	return(mwm_get_focused_monitor(monitor->mwm) == monitor);
+	return mwm_get_focused_monitor() == monitor;
 }
