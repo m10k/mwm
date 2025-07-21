@@ -1450,27 +1450,9 @@ struct workspace *mwm_get_focused_workspace(void)
 	return workspace;
 }
 
-int mwm_foreach_workspace(int (*func)(struct workspace*, void*),
-                          void *data)
+int mwm_foreach_workspace(int (*func)(struct workspace*, void*), void *data)
 {
-	loop_iter_t first;
-	loop_iter_t cur;
-
-	first = loop_get_iter(&_mwm->workspaces);
-	cur = first;
-
-	do {
-		struct workspace *workspace;
-
-		workspace = (struct workspace*)loop_iter_get_data(cur);
-
-		if(func(workspace, data) < 0) {
-			break;
-		}
-		cur = loop_iter_get_next(cur);
-	} while(cur != first);
-
-	return(0);
+	return loop_foreach_with_data(&_mwm->workspaces, (int(*)(void*, void*))func, data);
 }
 
 int mwm_needs_redraw(void)
