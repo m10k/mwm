@@ -144,23 +144,6 @@ int client_is_visible(struct client *client)
 	return(workspace_get_viewer(workspace) != NULL);
 }
 
-int client_show(struct client *client)
-{
-#if MWM_DEBUG
-	printf("XMoveResizeWindow(%p, %ld, %d, %d, %d, %d)\n",
-	       (void*)client, client->window,
-	       client->geom.x, client->geom.y,
-	       client->geom.w, client->geom.h);
-#endif /* MWM_DEBUG */
-
-	XMoveResizeWindow(mwm_get_display(), client->window,
-			  client->geom.x, client->geom.y,
-			  client->geom.w, client->geom.h);
-	XMapRaised(mwm_get_display(), client->window);
-
-	return(0);
-}
-
 int client_needs_redraw(struct client *client)
 {
 	if(!client) {

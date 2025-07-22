@@ -416,7 +416,7 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *usable_area)
 
 int _draw_client(struct workspace *workspace, struct client *client, void *data)
 {
-	client_show(client);
+	client_redraw(client);
 	return(0);
 }
 

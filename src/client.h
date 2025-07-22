@@ -25,7 +25,6 @@ int client_set_geometry(struct client *client, struct geom *geom);
 
 int client_set_workspace(struct client *client, struct workspace *workspace);
 struct workspace* client_get_workspace(struct client *client);
-int client_show(struct client *client);
 
 int client_needs_redraw(struct client *client);
 int client_focus(struct client *client);
