@@ -103,11 +103,12 @@ int client_redraw(struct client *client)
 
 	if(client_is_visible(client)) {
 		XMapRaised(mwm_get_display(), client->window);
-		XMoveWindow(mwm_get_display(), client->window,
-			    client->geom.x, client->geom.y);
+		XMoveResizeWindow(mwm_get_display(), client->window,
+		                  client->geom.x, client->geom.y,
+		                  client->geom.w, client->geom.h);
 	} else {
 		XMoveWindow(mwm_get_display(), client->window,
-			    client->geom.w * -2, client->geom.y);
+		            client->geom.w * -2, client->geom.y);
 	}
 
 	client->needs_redraw = 0;
