@@ -201,11 +201,10 @@ int client_focus(struct client *client)
 	 */
 	extents.x = client->geom.current.x - 1;
 	extents.y = client->geom.current.y - 1;
-	extents.w = client->geom.current.x + client->geom.current.w + 1;
-	extents.h = client->geom.current.y + client->geom.current.h + 1;
+	extents.w = client->geom.current.w + 1;
+	extents.h = client->geom.current.h + 1;
 
-	if (!(pointer.x >= extents.x && pointer.y >= extents.y &&
-	      pointer.x <= extents.w && pointer.y <= extents.h)) {
+	if (!geom_contains(&extents, &pointer)) {
 		client_restore_pointer(client);
 	}
 
