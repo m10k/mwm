@@ -54,3 +54,11 @@ int geom_intersects(struct geom *first, struct geom *second)
 
 	return(width * height);
 }
+
+int geom_contains(struct geom *first, struct geom *second)
+{
+	return (first->x <= second->x &&
+	        (first->x + first->w) >= (second->x + second->w) &&
+	        first->y <= second->y &&
+	        (first->y + first->h) >= (second->y + second->h));
+}

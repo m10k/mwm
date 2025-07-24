@@ -17,5 +17,6 @@ struct geom {
 
 int cmp_pointer(void *left, void *right);
 int geom_intersects(struct geom *left, struct geom *right);
+int geom_contains(struct geom *left, struct geom *right);
 
 #endif /* COMMON_H */
