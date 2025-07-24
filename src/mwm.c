@@ -1582,6 +1582,33 @@ int mwm_get_text_property(Window window, Atom atom, char **dst)
 	return len;
 }
 
+int mwm_get_pointer(struct geom *pointer)
+{
+	Window root;
+	Window dontcare_w;
+	int x, y;
+	int dontcare_i;
+	unsigned int dontcare_ui;
+
+	if (!pointer) {
+		return -EINVAL;
+	}
+
+	if (XQueryPointer(_mwm->display, _mwm->root,
+	                  &root, &dontcare_w,
+	                  &x, &y,
+	                  &dontcare_i, &dontcare_i,
+	                  &dontcare_ui) == False) {
+		/* pointer is not on this screen */
+		return -ENOMEDIUM;
+	}
+
+	pointer->x = x;
+	pointer->y = y;
+
+	return 0;
+}
+
 int mwm_get_status(char **buffer)
 {
 	char *status;

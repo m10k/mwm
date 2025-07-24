@@ -4,6 +4,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 #include "theme.h"
+#include "common.h"
 
 struct mwm;
 struct monitor;
@@ -83,6 +84,7 @@ int mwm_get_text_width(const char *text);
 int mwm_get_text_property(Window window, Atom atom, char **dst);
 unsigned long mwm_get_color(mwm_palette_t palette, mwm_color_t color);
 
+int mwm_get_pointer(struct geom *pointer);
 int mwm_get_status(char **dst);
 int mwm_grab_keys(void);
 int mwm_cmd(mwm_cmd_t, void *data);
