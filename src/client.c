@@ -176,12 +176,9 @@ int client_needs_redraw(struct client *client)
 int client_focus(struct client *client)
 {
 	Display *display;
-	Window dontcare_w;
-	int dontcare_i;
-	unsigned int dontcare_u;
+	struct geom pointer;
 	struct geom extents;
-	int x;
-	int y;
+	int err;
 
 	if (!client) {
 		return -EINVAL;
@@ -191,6 +188,10 @@ int client_focus(struct client *client)
 
 	XSetInputFocus(display, client->window, RevertToPointerRoot, CurrentTime);
 
+	if ((err = mwm_get_pointer(&pointer)) < 0) {
+		return err;
+	}
+
 	/*
 	 * If the pointer is not over the focused client, move it over the client.
 	 * Because of the border, the window is actually slightly larger than what
@@ -198,34 +199,30 @@ int client_focus(struct client *client)
 	 * the pointer would suddenly jump to the center of the window when the
 	 * user is moving the pointer over the border.
 	 */
-	XQueryPointer(display, client->window, &dontcare_w, &dontcare_w,
-		      &x, &y, &dontcare_i, &dontcare_i, &dontcare_u);
-
 	extents.x = client->geom.current.x - 1;
 	extents.y = client->geom.current.y - 1;
 	extents.w = client->geom.current.x + client->geom.current.w + 1;
 	extents.h = client->geom.current.y + client->geom.current.h + 1;
 
-	if(!(x >= extents.x && y >= extents.y &&
-	     x <= extents.w && y <= extents.h)) {
+	if (!(pointer.x >= extents.x && pointer.y >= extents.y &&
+	      pointer.x <= extents.w && pointer.y <= extents.h)) {
 		client_restore_pointer(client);
 	}
 
-	return(0);
+	return 0;
 }
 
 int client_save_pointer(struct client *client)
 {
-	Display *display;
-	Window dontcare_w;
-	int dontcare_i;
-	unsigned int dontcare_u;
+	int err;
 
-	display = mwm_get_display();
+	if (!client) {
+		return -EINVAL;
+	}
 
-	XQueryPointer(display, client->window, &dontcare_w, &dontcare_w,
-	              &client->pointer.x, &client->pointer.y, &dontcare_i,
-	              &dontcare_i, &dontcare_u);
+	if ((err = mwm_get_pointer(&client->pointer)) < 0) {
+		return err;
+	}
 
 	client->pointer.x -= client->geom.current.x;
 	client->pointer.y -= client->geom.current.y;
