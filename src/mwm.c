@@ -59,10 +59,14 @@ struct mwm {
 	int needs_redraw;
 	struct loop *monitors;
 	struct loop *workspaces;
-	struct monitor *current_monitor;
-	struct client *focused_client;
 
-	struct monitor *next_monitor;
+	struct {
+		struct monitor *current;
+		struct monitor *next;
+		int changed;
+	} focus;
+
+	struct client *focused_client;
 
 	struct xrandr *xrandr;
 
@@ -1211,14 +1215,6 @@ int mwm_run(void)
 			}
 		} while (XEventsQueued(_mwm->display, QueuedAfterFlush) > 0);
 
-		if (_mwm->next_monitor && _mwm->next_monitor != _mwm->current_monitor) {
-			monitor_needs_redraw(_mwm->current_monitor);
-			monitor_needs_redraw(_mwm->next_monitor);
-
-			_mwm->current_monitor = _mwm->next_monitor;
-			_mwm->next_monitor = NULL;
-		}
-
 		if (_mwm->needs_redraw) {
 			mwm_redraw();
 		}
@@ -1283,11 +1279,11 @@ int mwm_detach_monitor(struct monitor *mon)
 
 	loop_get_next(&_mwm->monitors, mon, (void**)&next_monitor);
 
-	if(loop_remove(&_mwm->monitors, mon) < 0) {
+	if (loop_remove(&_mwm->monitors, mon) < 0) {
 		return -ENODEV;
 	}
 
-	if (_mwm->current_monitor == mon) {
+	if (mwm_get_focused_monitor() == mon) {
 #if MWM_DEBUG
 		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
 		        __func__, (void*)mon, (void*)next_monitor);
@@ -1304,35 +1300,37 @@ int mwm_detach_monitor(struct monitor *mon)
 int mwm_focus_monitor(struct monitor *monitor)
 {
 	if (!monitor) {
-		return(-EINVAL);
+		return -EINVAL;
 	}
 
 #if MWM_DEBUG
 	fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
 #endif /* MWM_DEBUG */
-	_mwm->next_monitor = monitor;
+
+	_mwm->focus.next = monitor;
+	_mwm->focus.changed = 1;
+
+	mwm_needs_redraw();
 
 	return 0;
 }
 
 struct monitor* mwm_get_focused_monitor(void)
 {
-	return(_mwm->current_monitor);
+	return _mwm->focus.current;
 }
 
 int mwm_attach_client(struct client *client)
 {
 	struct workspace *workspace;
+	struct monitor *monitor;
 
 	if (!client) {
 		return -EINVAL;
 	}
 
-	workspace = NULL;
-
-	if (_mwm->current_monitor) {
-		workspace = monitor_get_workspace(_mwm->current_monitor);
-	}
+	monitor = mwm_get_focused_monitor();
+	workspace = monitor ? monitor_get_workspace(monitor) : NULL;
 
 	if (!workspace) {
 		/*
@@ -1463,13 +1461,23 @@ int mwm_needs_redraw(void)
 
 int mwm_redraw(void)
 {
+	if (_mwm->focus.changed) {
+		monitor_needs_redraw(_mwm->focus.current);
+		monitor_needs_redraw(_mwm->focus.next);
+
+		_mwm->focus.current = _mwm->focus.next;
+		_mwm->focus.next = NULL;
+	}
+
 	if(_mwm->needs_redraw) {
 		loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_redraw);
 		loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_redraw);
-		_mwm->needs_redraw = 0;
 	}
 
-	return(0);
+	_mwm->needs_redraw = 0;
+	_mwm->focus.changed = 0;
+
+	return 0;
 }
 
 Window mwm_create_window(const int x, const int y, const int w, const int h)
