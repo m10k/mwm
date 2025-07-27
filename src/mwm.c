@@ -153,7 +153,7 @@ static void _xev_configure_request(XEvent *event)
 	 * stored in the client structure.
 	 */
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)mwm, (void*)event);
+	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
 	configure_request = &event->xconfigurerequest;
@@ -657,6 +657,54 @@ void _sigchld(int unused)
 	return;
 }
 
+#if MWM_DEBUG
+static void _handle_signal(int sig)
+{
+	fprintf(stderr,
+	        "MWM %p\n"
+	        "    Screen:         %d\n"
+	        "    Root window:    %lx\n"
+	        "    Root geometry:  %dx%d @ %dx%d\n"
+	        "    Running:        %d\n"
+	        "    Needs redraw:   %d\n"
+	        "    Current focus:  %p\n"
+	        "    Next focus:     %p\n"
+	        "    Focus changed:  %d\n"
+	        "    Focused client: %p\n",
+	        (void*)_mwm,
+	        _mwm->screen,
+	        _mwm->root,
+	        _mwm->root_geom.w, _mwm->root_geom.h, _mwm->root_geom.x, _mwm->root_geom.y,
+	        _mwm->running,
+	        _mwm->needs_redraw,
+	        (void*)_mwm->focus.current,
+	        (void*)_mwm->focus.next,
+	        _mwm->focus.changed,
+	        (void*)_mwm->focused_client);
+
+	fprintf(stderr, "----- BEGIN monitors -----\n");
+	loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_dump);
+	fprintf(stderr, "----- END monitors -----\n");
+
+	fprintf(stderr, "----- BEGIN workspaces -----\n");
+	loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_dump);
+	fprintf(stderr, "----- END workspaces -----\n");
+}
+
+static void _setup_sigusr_handler(void)
+{
+	struct sigaction act;
+
+	memset(&act, 0, sizeof(act));
+	act.sa_handler = _handle_signal;
+
+	if (sigaction(SIGUSR1, &act, NULL) < 0) {
+		perror("sigaction");
+		exit(1);
+	}
+}
+#endif /* MWM_DEBUG */
+
 static void _cmd_spawn(void *arg)
 {
         char **argv;
@@ -1021,6 +1069,9 @@ int mwm_init(void)
 	}
 
 	_sigchld(0);
+#if MWM_DEBUG
+	_setup_sigusr_handler();
+#endif /* MWM_DEBUG */
 
 	_mwm->screen = DefaultScreen(_mwm->display);
 	_mwm->root = RootWindow(_mwm->display, _mwm->screen);

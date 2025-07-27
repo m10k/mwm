@@ -33,4 +33,8 @@ int monitor_needs_redraw(struct monitor *monitor);
 int monitor_redraw(struct monitor *monitor);
 int monitor_is_focused(struct monitor *monitor);
 
+#if MWM_DEBUG
+void monitor_dump(struct monitor *monitor);
+#endif /* MWM_DEBUG */
+
 #endif /* MONITOR_H */

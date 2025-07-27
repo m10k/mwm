@@ -640,3 +640,20 @@ int monitor_is_focused(struct monitor *monitor)
 {
 	return mwm_get_focused_monitor() == monitor;
 }
+
+#if MWM_DEBUG
+void monitor_dump(struct monitor *monitor)
+{
+	fprintf(stderr,
+	        "  Monitor %p\n"
+	        "    Identifier:       0x%x\n"
+	        "    Current geometry: %dx%d @ %dx%d\n"
+	        "    Next geometry:    %dx%d @ %dx%d\n"
+	        "    Geometry changed: %d\n",
+	        (void*)monitor,
+	        monitor->id,
+	        monitor->geom.current.w, monitor->geom.current.h, monitor->geom.current.x, monitor->geom.current.y,
+	        monitor->geom.next.w, monitor->geom.next.h, monitor->geom.next.x, monitor->geom.next.y,
+	        monitor->geom.changed);
+}
+#endif /* MWM_DEBUG */

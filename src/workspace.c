@@ -311,3 +311,22 @@ int workspace_shift_client(struct workspace *workspace, struct client *client, i
 
 	return(0);
 }
+
+#if MWM_DEBUG
+void workspace_dump(struct workspace *workspace)
+{
+	fprintf(stderr,
+	        "  Workspace %p\n"
+	        "    Number:       %d\n"
+	        "    Focused:      %p\n"
+	        "    On monitor:   %p\n"
+	        "    Needs redraw: %d\n",
+	        (void*)workspace,
+	        workspace->number,
+	        (void*)workspace->focused,
+	        (void*)workspace->viewer,
+	        workspace->needs_redraw);
+
+	loop_foreach(&workspace->clients, (void(*)(void*))client_dump);
+}
+#endif /* MWM_DEBUG */

@@ -37,4 +37,8 @@ void client_property_notify(struct client *client, XPropertyEvent *event);
 
 const char* client_get_hint(struct client *client);
 
+#if MWM_DEBUG
+void client_dump(struct client *client);
+#endif /* MWM_DEBUG */
+
 #endif /* MWM_CLIENT_H */

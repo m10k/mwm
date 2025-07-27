@@ -36,4 +36,8 @@ int workspace_redraw(struct workspace *workspace);
 int workspace_shift_focus(struct workspace *workspace, int dir);
 int workspace_shift_client(struct workspace *workspace, struct client *client, int dir);
 
+#if MWM_DEBUG
+void workspace_dump(struct workspace *workspace);
+#endif /* MWM_DEBUG */
+
 #endif /* MWM_WORKSPACE_H */

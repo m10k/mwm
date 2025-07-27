@@ -16,7 +16,7 @@ LDFLAGS = -lX11 -lXrandr $(shell pkg-config --libs $(PKG_CONFIG_LIBS))
 PHONY = all clean install uninstall
 
 ifeq ($(DEBUG), 1)
-	CFLAGS += -g
+	CFLAGS += -g -DMWM_DEBUG=1
 	LDFLAGS += -g
 endif
 

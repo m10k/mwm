@@ -386,3 +386,28 @@ const char* client_get_hint(struct client *client)
 {
 	return client->hint;
 }
+
+#if MWM_DEBUG
+void client_dump(struct client *client)
+{
+	fprintf(stderr,
+	        "    Client %p\n"
+	        "      Window %lx\n"
+	        "      Current geometry: %dx%d @ %dx%d\n"
+	        "      Next geometry:    %dx%d @ %dx%d\n"
+	        "      Geometry changed: %d\n"
+	        "      Pointer:          %dx%d [w/h %dx%d]\n"
+	        "      Needs redraw:     %d\n"
+	        "      Workspace:        %p\n"
+	        "      Hint:             %s\n",
+	        (void*)client,
+	        client->window,
+	        client->geom.current.w, client->geom.current.h, client->geom.current.x, client->geom.current.y,
+	        client->geom.next.w, client->geom.next.h, client->geom.next.x, client->geom.next.y,
+	        client->geom.changed,
+	        client->pointer.x, client->pointer.y, client->pointer.w, client->pointer.h,
+	        client->needs_redraw,
+	        (void*)client->workspace,
+	        client->hint ? client->hint : "(none)");
+}
+#endif /* MWM_DEBUG */
