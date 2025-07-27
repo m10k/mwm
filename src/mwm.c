@@ -140,7 +140,7 @@ static int _cmp_workspace_number(struct workspace *workspace, int *number)
 	return(workspace_get_number(workspace) == *number ? 0 : 1);
 }
 
-static void _mwm_configure_request(XEvent *event)
+static void _xev_configure_request(XEvent *event)
 {
 	XConfigureRequestEvent *configure_request;
 	struct client *client;
@@ -186,7 +186,7 @@ static void _mwm_configure_request(XEvent *event)
 	return;
 }
 
-static void _mwm_configure_notify(XEvent *event)
+static void _xev_configure_notify(XEvent *event)
 {
 	XConfigureEvent *cevent;
 
@@ -207,7 +207,7 @@ static void _mwm_configure_notify(XEvent *event)
 	return;
 }
 
-static void _mwm_destroy_notify(XDestroyWindowEvent *event)
+static void _xev_destroy_notify(XDestroyWindowEvent *event)
 {
 	struct client *client;
 
@@ -231,7 +231,7 @@ static void _mwm_destroy_notify(XDestroyWindowEvent *event)
 	return;
 }
 
-static void _mwm_enter_notify(XCrossingEvent *event)
+static void _xev_enter_notify(XCrossingEvent *event)
 {
 	struct client *client;
 	struct monitor *monitor;
@@ -262,7 +262,7 @@ static void _mwm_enter_notify(XCrossingEvent *event)
 	return;
 }
 
-static void _mwm_expose(XExposeEvent *event)
+static void _xev_expose(XExposeEvent *event)
 {
 	struct monitor *monitor;
 
@@ -284,7 +284,7 @@ static void _mwm_expose(XExposeEvent *event)
 	return;
 }
 
-static void _mwm_focus_in(XFocusInEvent *event)
+static void _xev_focus_in(XFocusInEvent *event)
 {
 	struct client *client;
 
@@ -303,7 +303,7 @@ static void _mwm_focus_in(XFocusInEvent *event)
 	return;
 }
 
-static void _mwm_key_press(XKeyEvent *event)
+static void _xev_key_press(XKeyEvent *event)
 {
 	extern struct key_binding config_keybindings[];
 	struct key_binding *binding;
@@ -337,7 +337,7 @@ static void _mwm_key_press(XKeyEvent *event)
 	return;
 }
 
-static void _mwm_mapping_notify(XMappingEvent *event)
+static void _xev_mapping_notify(XMappingEvent *event)
 {
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
@@ -352,7 +352,7 @@ static void _mwm_mapping_notify(XMappingEvent *event)
 	return;
 }
 
-static void _mwm_map_request(XMapRequestEvent *event)
+static void _xev_map_request(XMapRequestEvent *event)
 {
 	XWindowAttributes attrs;
 
@@ -387,7 +387,7 @@ static void _mwm_map_request(XMapRequestEvent *event)
 	return;
 }
 
-static void _mwm_motion_notify(XMotionEvent *event)
+static void _xev_motion_notify(XMotionEvent *event)
 {
 	struct monitor *monitor;
 	struct geom pointer_geom;
@@ -416,7 +416,7 @@ static void _mwm_motion_notify(XMotionEvent *event)
 	return;
 }
 
-static void _mwm_property_notify(XPropertyEvent *event)
+static void _xev_property_notify(XPropertyEvent *event)
 {
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
@@ -439,7 +439,7 @@ static void _mwm_property_notify(XPropertyEvent *event)
 	return;
 }
 
-static void _mwm_unmap_notify(XUnmapEvent *event)
+static void _xev_unmap_notify(XUnmapEvent *event)
 {
 	struct client *client;
 
@@ -551,18 +551,18 @@ static int mwm_new(struct mwm **dst)
 		}
 	}
 
-	mwm->xhandler[ConfigureRequest] = (_mwm_xhandler_t*)_mwm_configure_request;
-	mwm->xhandler[ConfigureNotify]  = (_mwm_xhandler_t*)_mwm_configure_notify;
-	mwm->xhandler[DestroyNotify]    = (_mwm_xhandler_t*)_mwm_destroy_notify;
-	mwm->xhandler[EnterNotify]      = (_mwm_xhandler_t*)_mwm_enter_notify;
-	mwm->xhandler[Expose]           = (_mwm_xhandler_t*)_mwm_expose;
-	mwm->xhandler[FocusIn]          = (_mwm_xhandler_t*)_mwm_focus_in;
-	mwm->xhandler[KeyPress]         = (_mwm_xhandler_t*)_mwm_key_press;
-	mwm->xhandler[MappingNotify]    = (_mwm_xhandler_t*)_mwm_mapping_notify;
-	mwm->xhandler[MapRequest]       = (_mwm_xhandler_t*)_mwm_map_request;
-	mwm->xhandler[MotionNotify]     = (_mwm_xhandler_t*)_mwm_motion_notify;
-	mwm->xhandler[PropertyNotify]   = (_mwm_xhandler_t*)_mwm_property_notify;
-	mwm->xhandler[UnmapNotify]      = (_mwm_xhandler_t*)_mwm_unmap_notify;
+	mwm->xhandler[ConfigureRequest] = (_mwm_xhandler_t*)_xev_configure_request;
+	mwm->xhandler[ConfigureNotify]  = (_mwm_xhandler_t*)_xev_configure_notify;
+	mwm->xhandler[DestroyNotify]    = (_mwm_xhandler_t*)_xev_destroy_notify;
+	mwm->xhandler[EnterNotify]      = (_mwm_xhandler_t*)_xev_enter_notify;
+	mwm->xhandler[Expose]           = (_mwm_xhandler_t*)_xev_expose;
+	mwm->xhandler[FocusIn]          = (_mwm_xhandler_t*)_xev_focus_in;
+	mwm->xhandler[KeyPress]         = (_mwm_xhandler_t*)_xev_key_press;
+	mwm->xhandler[MappingNotify]    = (_mwm_xhandler_t*)_xev_mapping_notify;
+	mwm->xhandler[MapRequest]       = (_mwm_xhandler_t*)_xev_map_request;
+	mwm->xhandler[MotionNotify]     = (_mwm_xhandler_t*)_xev_motion_notify;
+	mwm->xhandler[PropertyNotify]   = (_mwm_xhandler_t*)_xev_property_notify;
+	mwm->xhandler[UnmapNotify]      = (_mwm_xhandler_t*)_xev_unmap_notify;
 
 cleanup:
 	if(err < 0) {
