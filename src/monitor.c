@@ -38,7 +38,13 @@ struct monitor {
 	struct indicator indicator[2];
 
 	int needs_redraw;
-	struct geom geom;
+
+	struct {
+		struct geom current;
+		struct geom next;
+		int changed;
+	} geom;
+
 	struct workspace *workspace;
 	struct layout *layout;
 };
@@ -69,17 +75,18 @@ static void _indicator_update_window(struct indicator *indicator, struct monitor
 static void _indicator_update_geometry(struct monitor *monitor)
 {
 	monitor->indicator[HINDICATOR].orientation = HINDICATOR;
-	monitor->indicator[HINDICATOR].geom.x = monitor->geom.x;
-	monitor->indicator[HINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
-	monitor->indicator[HINDICATOR].geom.w = monitor->geom.w;
+	monitor->indicator[HINDICATOR].geom.x = monitor->geom.current.x;
+	monitor->indicator[HINDICATOR].geom.y = monitor->geom.current.y + STATUSBAR_HEIGHT;
+	monitor->indicator[HINDICATOR].geom.w = monitor->geom.current.w;
 	monitor->indicator[HINDICATOR].geom.h = INDICATOR_HEIGHT;
 	_indicator_update_window(&monitor->indicator[HINDICATOR], monitor);
 
 	monitor->indicator[VINDICATOR].orientation = VINDICATOR;
-	monitor->indicator[VINDICATOR].geom.x = monitor->geom.x + monitor->geom.w - INDICATOR_HEIGHT;
-	monitor->indicator[VINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
+	monitor->indicator[VINDICATOR].geom.x = monitor->geom.current.x + monitor->geom.current.w -
+		INDICATOR_HEIGHT;
+	monitor->indicator[VINDICATOR].geom.y = monitor->geom.current.y + STATUSBAR_HEIGHT;
 	monitor->indicator[VINDICATOR].geom.w = INDICATOR_HEIGHT;
-	monitor->indicator[VINDICATOR].geom.h = monitor->geom.h - STATUSBAR_HEIGHT;
+	monitor->indicator[VINDICATOR].geom.h = monitor->geom.current.h - STATUSBAR_HEIGHT;
 	_indicator_update_window(&monitor->indicator[VINDICATOR], monitor);
 
 	return;
@@ -213,8 +220,8 @@ int monitor_new(int id, int x, int y, int w, int h,
 {
 	struct monitor *mon;
 
-	if(!monitor) {
-		return(-EINVAL);
+	if (!monitor) {
+		return -EINVAL;
 	}
 
 	if (!(mon = calloc(1, sizeof(*mon)))) {
@@ -222,10 +229,10 @@ int monitor_new(int id, int x, int y, int w, int h,
 	}
 
 	mon->id = id;
-	mon->geom.x = x;
-	mon->geom.y = y;
-	mon->geom.w = w;
-	mon->geom.h = h;
+	mon->geom.current.x = x;
+	mon->geom.current.y = y;
+	mon->geom.current.w = w;
+	mon->geom.current.h = h;
 	mon->layout = layouts[0];
 
 	mon->statusbar = mwm_create_window(x, y, w, STATUSBAR_HEIGHT);
@@ -238,7 +245,7 @@ int monitor_new(int id, int x, int y, int w, int h,
 
 	*monitor = mon;
 
-	return(0);
+	return 0;
 }
 
 int monitor_free(struct monitor **monitor)
@@ -281,32 +288,33 @@ int monitor_get_id(struct monitor *monitor)
 
 int monitor_get_geometry(struct monitor *monitor, struct geom *geom)
 {
-	if(!monitor || !geom) {
-		return(-EINVAL);
+	if (!monitor || !geom) {
+		return -EINVAL;
 	}
 
-	memcpy(geom, &monitor->geom, sizeof(*geom));
-	return(0);
+	memcpy(geom, &monitor->geom.current, sizeof(*geom));
+	return 0;
 }
 
 int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 {
-	if(!monitor || !geom) {
-		return(-EINVAL);
+	if (!monitor || !geom) {
+		return -EINVAL;
 	}
 
-	memcpy(&monitor->geom, geom, sizeof(*geom));
+	if (memcmp(&monitor->geom.current, geom, sizeof(monitor->geom.current)) == 0) {
+		return -EALREADY;
+	}
 
-	XMoveResizeWindow(mwm_get_display(), monitor->statusbar,
-			  monitor->geom.x, monitor->geom.y,
-			  monitor->geom.w, STATUSBAR_HEIGHT);
-	mwm_free_pixmap(monitor->draw_buffer);
-	monitor->draw_buffer = mwm_create_pixmap(0, monitor->geom.w, STATUSBAR_HEIGHT);
-	XftDrawChange(monitor->xft_context, monitor->draw_buffer);
+#if MWM_DEBUG
+	fprintf(stderr, "Setting geometry of monitor %x to %dx%d @ %dx%d\n",
+	        monitor->id, geom->w, geom->h, geom->x, geom->y);
+#endif /* MWM_DEBUG */
 
-	_indicator_update_geometry(monitor);
+	memcpy(&monitor->geom.next, geom, sizeof(*geom));
+	monitor->geom.changed = 1;
 
-	return(0);
+	return 0;
 }
 
 int monitor_swap_workspace(struct monitor *first, struct monitor *second)
@@ -395,10 +403,14 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *usable_area)
 {
 	layout_orientation_t orientation;
 
-	usable_area->x = monitor->geom.x;
-	usable_area->y = monitor->geom.y + STATUSBAR_HEIGHT;
-	usable_area->w = monitor->geom.w;
-	usable_area->h = monitor->geom.h - STATUSBAR_HEIGHT;
+	if (!monitor || !usable_area) {
+		return -EINVAL;
+	}
+
+	usable_area->x = monitor->geom.current.x;
+	usable_area->y = monitor->geom.current.y + STATUSBAR_HEIGHT;
+	usable_area->w = monitor->geom.current.w;
+	usable_area->h = monitor->geom.current.h - STATUSBAR_HEIGHT;
 
 	orientation = layout_get_orientation(monitor->layout);
 
@@ -411,7 +423,7 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *usable_area)
 		usable_area->h -= INDICATOR_HEIGHT;
 	}
 
-	return(0);
+	return 0;
 }
 
 int _draw_client(struct workspace *workspace, struct client *client, void *data)
@@ -539,8 +551,8 @@ static int _redraw_statusbar(struct monitor *monitor)
 	/* right-align the status */
 	status_width = mwm_get_text_width(status ? status :  "") +
 		dwdata.text_padding * 2;
-	status_x = monitor->geom.w - status_width;
-	status_width_max = monitor->geom.w - workspace_button_width;
+	status_x = monitor->geom.current.w - status_width;
+	status_width_max = monitor->geom.current.w - workspace_button_width;
 
 	/*
 	 * If there isn't enough space, left-align. I'd prefer part of the status to be cut
@@ -548,7 +560,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	 */
 	if(status_x < workspace_button_width) {
 		status_x = workspace_button_width;
-		status_width = monitor->geom.w - status_x;
+		status_width = monitor->geom.current.w - status_x;
 	} else if(status_x > workspace_button_width) {
 		XSetForeground(display, monitor->gfx_context,
 			       mwm_get_color(dwdata.palette, MWM_COLOR_FOCUSED));
@@ -568,7 +580,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	                status_width_max, STATUSBAR_HEIGHT);
 
 	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
-		  0, 0, monitor->geom.w, STATUSBAR_HEIGHT, 0, 0);
+		  0, 0, monitor->geom.current.w, STATUSBAR_HEIGHT, 0, 0);
 	free(status);
 
 	return(0);
@@ -576,17 +588,32 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 int monitor_redraw(struct monitor *monitor)
 {
+	if (monitor->geom.changed) {
+		memcpy(&monitor->geom.current, &monitor->geom.next, sizeof(monitor->geom.current));
+		memset(&monitor->geom.next, 0, sizeof(monitor->geom.next));
+
+		XMoveResizeWindow(mwm_get_display(), monitor->statusbar,
+		                  monitor->geom.current.x, monitor->geom.current.y,
+		                  monitor->geom.current.w, STATUSBAR_HEIGHT);
+		mwm_free_pixmap(monitor->draw_buffer);
+		monitor->draw_buffer = mwm_create_pixmap(0, monitor->geom.current.w, STATUSBAR_HEIGHT);
+		XftDrawChange(monitor->xft_context, monitor->draw_buffer);
+
+		_indicator_update_geometry(monitor);
+	}
+
 	if(monitor->needs_redraw) {
 		monitor_arrange_clients(monitor);
 		monitor_draw_clients(monitor);
-
-		monitor->needs_redraw = 0;
 	}
 
 	_redraw_statusbar(monitor);
 	monitor_redraw_indicators(monitor);
 
-	return(0);
+	monitor->geom.changed = 0;
+	monitor->needs_redraw = 0;
+
+	return 0;
 }
 
 int monitor_set_layout(struct monitor *monitor,
