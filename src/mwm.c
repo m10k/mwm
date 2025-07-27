@@ -1288,6 +1288,14 @@ int mwm_detach_monitor(struct monitor *mon)
 		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
 		        __func__, (void*)mon, (void*)next_monitor);
 #endif /* MWM_DEBUG */
+
+		if (next_monitor == mon) {
+#if MWM_DEBUG
+			fprintf(stderr, "%s: There are no other monitors?\n", __func__);
+#endif /* MWM_DEBUG */
+			next_monitor = NULL;
+		}
+
 		mwm_focus_monitor(next_monitor);
 	}
 
