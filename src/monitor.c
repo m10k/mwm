@@ -45,7 +45,12 @@ struct monitor {
 		int changed;
 	} geom;
 
-	struct workspace *workspace;
+	struct {
+		struct workspace *current;
+		struct workspace *next;
+		int changed;
+	} workspace;
+
 	struct layout *layout;
 };
 
@@ -319,34 +324,37 @@ int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 
 int monitor_swap_workspace(struct monitor *first, struct monitor *second)
 {
-	struct workspace *swap;
+	first->workspace.next = second->workspace.current;
+	first->workspace.changed = 1;
 
-	swap = first->workspace;
-	first->workspace = second->workspace;
-	second->workspace = swap;
+	second->workspace.next = first->workspace.current;
+	second->workspace.changed = 1;
 
-	workspace_set_viewer(first->workspace, first);
-	workspace_set_viewer(second->workspace, second);
+	workspace_set_viewer(first->workspace.current, first);
+	workspace_set_viewer(second->workspace.current, second);
 
-	workspace_needs_redraw(first->workspace);
-	workspace_needs_redraw(second->workspace);
+	workspace_needs_redraw(first->workspace.current);
+	workspace_needs_redraw(second->workspace.current);
 
-	return(0);
+	return 0;
 }
 
 int monitor_set_workspace(struct monitor *monitor, struct workspace *workspace)
 {
 	struct monitor *other;
 
-	if(!monitor || !workspace) {
-		return(-EINVAL);
+	if (!monitor || !workspace) {
+		return -EINVAL;
 	}
 
-	printf("%s(%p, %p)\n", __func__, (void*)monitor, (void*)workspace);
+#if MWM_DEBUG
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)monitor, (void*)workspace);
+#endif /* MWM_DEBUG */
+
 	other = workspace_get_viewer(workspace);
 
-	if(other) {
-		return(monitor_swap_workspace(monitor, other));
+	if (other) {
+		return monitor_swap_workspace(monitor, other);
 	} else {
 		struct workspace *old;
 
@@ -356,15 +364,17 @@ int monitor_set_workspace(struct monitor *monitor, struct workspace *workspace)
 	}
 
 	workspace_set_viewer(workspace, monitor);
-	monitor->workspace = workspace;
+
+	monitor->workspace.next = workspace;
+	monitor->workspace.changed = 1;
 	monitor_needs_redraw(monitor);
 
-	return(0);
+	return 0;
 }
 
 struct workspace* monitor_get_workspace(struct monitor *monitor)
 {
-	return(monitor->workspace);
+	return monitor->workspace.current;
 }
 
 struct client* monitor_get_focused_client(struct monitor *monitor)
@@ -393,7 +403,7 @@ int monitor_arrange_clients(struct monitor *monitor)
 	}
 
 	layout_arrange(monitor->layout,
-		       monitor->workspace,
+		       monitor->workspace.current,
 		       &geom);
 
 	return(0);
@@ -438,7 +448,7 @@ int monitor_draw_clients(struct monitor *monitor)
 		return(-EINVAL);
 	}
 
-	workspace_foreach_client(monitor->workspace, _draw_client, monitor);
+	workspace_foreach_client(monitor->workspace.current, _draw_client, monitor);
 
 	return(0);
 }
@@ -588,6 +598,10 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 int monitor_redraw(struct monitor *monitor)
 {
+	if (monitor->workspace.changed) {
+		monitor->workspace.current = monitor->workspace.next;
+	}
+
 	if (monitor->geom.changed) {
 		memcpy(&monitor->geom.current, &monitor->geom.next, sizeof(monitor->geom.current));
 		memset(&monitor->geom.next, 0, sizeof(monitor->geom.next));
@@ -610,6 +624,7 @@ int monitor_redraw(struct monitor *monitor)
 	_redraw_statusbar(monitor);
 	monitor_redraw_indicators(monitor);
 
+	monitor->workspace.changed = 0;
 	monitor->geom.changed = 0;
 	monitor->needs_redraw = 0;
 
