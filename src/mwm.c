@@ -372,7 +372,7 @@ static void _xev_map_request(XMapRequestEvent *event)
 			   &event->window, NULL) < 0) {
 		struct client *client;
 
-		if(client_new(event->window, &attrs, &client) < 0) {
+		if(client_new(event->window, &client) < 0) {
 			/* ENOMEM */
 			return;
 		}
@@ -1004,7 +1004,7 @@ static void _find_existing_clients(void)
                         struct client *client;
                         int err;
 
-                        if ((err = client_new(*cur, &attrs, &client)) < 0) {
+                        if ((err = client_new(*cur, &client)) < 0) {
                                 fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
                         } else if ((err = mwm_attach_client(client)) < 0) {
                                 fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
@@ -1028,7 +1028,7 @@ static void _find_existing_clients(void)
                         struct client *client;
                         int err;
 
-                        if ((err = client_new(*cur, &attrs, &client)) < 0) {
+                        if ((err = client_new(*cur, &client)) < 0) {
                                 fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
                         } else if ((err = mwm_attach_client(client)) < 0) {
                                 fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));

@@ -28,12 +28,12 @@ struct client {
 	char *hint;
 };
 
-int client_new(Window window, XWindowAttributes *attrs, struct client **client)
+int client_new(Window window, struct client **client)
 {
 	struct client *cl;
 
-	if(!client) {
-		return(-EINVAL);
+	if (!client) {
+		return -EINVAL;
 	}
 
 	if (!(cl = calloc(1, sizeof(*cl)))) {
@@ -47,7 +47,7 @@ int client_new(Window window, XWindowAttributes *attrs, struct client **client)
 	cl->pointer.h = 1;
 	*client = cl;
 
-	return(0);
+	return 0;
 }
 
 int client_free(struct client **client)

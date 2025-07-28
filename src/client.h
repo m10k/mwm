@@ -7,7 +7,7 @@ struct client;
 struct workspace;
 struct geom;
 
-int client_new(Window window, XWindowAttributes *attrs, struct client **client);
+int client_new(Window window, struct client **client);
 int client_free(struct client **client);
 
 Window client_get_window(struct client *client);
