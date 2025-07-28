@@ -3,13 +3,6 @@
 
 #include <X11/Xlib.h>
 
-typedef enum {
-	CLIENT_FIXED      = (1 << 0),
-	CLIENT_URGENT     = (1 << 2),
-	CLIENT_NEVERFOCUS = (1 << 3),
-	CLIENT_FULLSCREEN = (1 << 4)
-} client_flags_t;
-
 struct client;
 struct workspace;
 struct geom;

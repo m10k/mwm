@@ -23,7 +23,6 @@ struct client {
 	struct geom pointer;
 	int needs_redraw;
 
-	client_flags_t flags;
 	struct workspace *workspace;
 
 	char *hint;
