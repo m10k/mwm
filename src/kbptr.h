@@ -1,7 +1,7 @@
 #ifndef MWM_KBPTR_H
 #define MWM_KBPTR_H
 
-struct client;
+#include "client.h"
 
 #define KBPTR_CENTER   0
 #define KBPTR_NORTH    (1 << 1)
@@ -15,7 +15,7 @@ struct client;
 #define KBPTR_MIDDLE   Button2
 #define KBPTR_RIGHT    Button3
 
-void kbptr_move(struct client *client, long direction);
-void kbptr_click(struct client *client, long button);
+void kbptr_move(const client_t client, long direction);
+void kbptr_click(const client_t client, long button);
 
 #endif /* MWM_KBPTR_H */

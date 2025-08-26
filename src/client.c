@@ -364,7 +364,7 @@ int client_restore_pointer(const client_t client_id)
 #endif /* MWM_DEBUG */
 
 	if (client->pointer.x < 0 || client->pointer.y < 0) {
-		kbptr_move(client, KBPTR_CENTER);
+		kbptr_move(client_id, KBPTR_CENTER);
 	} else {
 		/* scale the pointer position if the client was resized */
 		if (client->geom.current.w != client->pointer.w ||

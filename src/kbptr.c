@@ -11,14 +11,14 @@ struct kbptr {
 	int y;
 	int hstride;
 	int vstride;
-	struct client *last_client;
+        client_t last_client;
 };
 
 static struct kbptr kbptr = {
-	.last_client = NULL
+	.last_client = -1
 };
 
-static void do_button(struct client *client,
+static void do_button(const client_t client,
 		      const unsigned int button,
 		      const unsigned int pressrelease)
 {
@@ -29,7 +29,7 @@ static void do_button(struct client *client,
 	Window window;
 
 	display = mwm_get_display();
-	window = client_get_window(client);
+	client_get_window(client, &window);
 
 	switch(pressrelease) {
 	case ButtonPress:
@@ -75,13 +75,15 @@ static void do_button(struct client *client,
 	return;
 }
 
-void kbptr_move(struct client *client, long direction)
+void kbptr_move(const client_t client, long direction)
 {
 	struct geom client_geom;
 	unsigned int dir;
         unsigned int stepsize;
+        Window window;
 
 	client_get_geometry(client, &client_geom);
+	client_get_window(client, &window);
 
 	if(client != kbptr.last_client) {
 		kbptr.x = client_geom.w / 2;
@@ -130,14 +132,14 @@ void kbptr_move(struct client *client, long direction)
                 return;
         }
 
-        XWarpPointer(mwm_get_display(), None, client_get_window(client),
+        XWarpPointer(mwm_get_display(), None, window,
                      0, 0, 0, 0,
                      kbptr.x, kbptr.y);
 
         return;
 }
 
-void kbptr_click(struct client *client, long button)
+void kbptr_click(const client_t client, long button)
 {
 	do_button(client, button, ButtonPress);
 	usleep(100000);
