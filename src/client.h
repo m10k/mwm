@@ -32,6 +32,10 @@ int client_property_notify(const client_t client_id, XPropertyEvent *event);
 
 int client_get_hint(const client_t client_id, const char **hint);
 
+client_t client_of_window(const Window window);
+client_t client_at(const struct geom pos);
+client_t client_at_xy(const int x, const int y);
+
 #if MWM_DEBUG
 int client_dump(const client_t client_id);
 #endif /* MWM_DEBUG */

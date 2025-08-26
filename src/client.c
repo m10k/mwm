@@ -497,6 +497,38 @@ int client_get_hint(const client_t client_id, const char **hint)
 	return 0;
 }
 
+static int _cmp_client_window(struct client *client, Window *window)
+{
+	return client->window == *window ? 0 : 1;
+}
+
+static int _client_contains_geom(struct client *client, struct geom *geom)
+{
+	return geom_contains(&client->geom.current, geom) ? 0 : 1;
+}
+
+client_t client_of_window(const Window window)
+{
+	return set_search(_clients, (int(*)(void*, void*))_cmp_client_window, (void*)&window);
+}
+
+client_t client_at(const struct geom pos)
+{
+	return set_search(_clients, (int(*)(void*, void*))_client_contains_geom, (void*)&pos);
+}
+
+client_t client_at_xy(const int x, const int y)
+{
+	struct geom geom;
+
+	geom.x = x;
+	geom.y = y;
+	geom.w = 0;
+	geom.h = 0;
+
+	return client_at(geom);
+}
+
 #if MWM_DEBUG
 int client_dump(const client_t client_id)
 {
