@@ -10,8 +10,10 @@
 #include "mwm.h"
 #include "monitor.h"
 #include "kbptr.h"
+#include "set.h"
 
 struct client {
+	client_t id;
 	Window window;
 
 	struct {
@@ -28,48 +30,88 @@ struct client {
 	char *hint;
 };
 
-int client_new(Window window, struct client **client)
-{
-	struct client *cl;
+static struct set *_clients = NULL;
 
-	if (!client) {
+static inline int __init(void)
+{
+	return _clients ? 0 : set_new(&_clients);
+}
+
+static inline int __get_client(struct client **client, const client_t client_id)
+{
+	int err;
+
+	if (client_id < 0) {
 		return -EINVAL;
 	}
 
-	if (!(cl = calloc(1, sizeof(*cl)))) {
-		return -ENOMEM;
+	if ((err = set_get(_clients, client_id, (void**)client)) < 0) {
+		return err;
 	}
 
-	cl->window = window;
-	cl->pointer.x = -1;
-	cl->pointer.y = -1;
-	cl->pointer.w = 1;
-	cl->pointer.h = 1;
-	*client = cl;
+	if (!*client) {
+		return -EBADF;
+	}
 
 	return 0;
 }
 
-int client_free(struct client **client)
+client_t client_new(Window window)
 {
-	if(!client) {
-		return(-EINVAL);
+	struct client *client;
+	int err;
+
+	if ((err = __init()) < 0) {
+		return err;
 	}
 
-	if(!*client) {
-		return(-EALREADY);
+	if (!(client = calloc(1, sizeof(*client)))) {
+		return -ENOMEM;
 	}
 
-	free(*client);
-	*client = NULL;
+	client->window = window;
+	client->pointer.x = -1;
+	client->pointer.y = -1;
+	client->pointer.w = 1;
+	client->pointer.h = 1;
 
-	return(0);
+	if ((err = set_nq(_clients, client)) < 0) {
+		free(client);
+	} else {
+		client->id = err;
+	}
+
+	return err;
 }
 
-int client_set_geometry(struct client *client, struct geom *geom)
+int client_free(const client_t client_id)
 {
-	if (!client || !geom) {
+	struct client *client;
+	int err;
+
+	if ((err = set_unset(_clients, client_id, (void**)&client)) < 0) {
+		return err;
+	}
+
+	if(!client) {
+		return -EBADF;
+	}
+
+	free(client);
+	return 0;
+}
+
+int client_set_geometry(const client_t client_id, struct geom *geom)
+{
+	struct client *client;
+	int err;
+
+	if (!geom) {
 		return -EINVAL;
+	}
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	if (memcmp(&client->geom.current, geom, sizeof(*geom)) == 0) {
@@ -79,32 +121,54 @@ int client_set_geometry(struct client *client, struct geom *geom)
 	memcpy(&client->geom.next, geom, sizeof(*geom));
 	client->geom.changed = 1;
 
-	if (client_is_visible(client)) {
-		client_needs_redraw(client);
+	if (client_is_visible(client_id)) {
+		client_needs_redraw(client_id);
 	}
 
 	return 0;
 }
 
-int client_get_geometry(struct client *client, struct geom *geom)
+int client_get_geometry(const client_t client_id, struct geom *geom)
 {
-	if (!client || !geom) {
+	struct client *client;
+	int err;
+
+	if (!geom) {
 		return -EINVAL;
+	}
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	memcpy(geom, &client->geom.current, sizeof(*geom));
 	return 0;
 }
 
-Window client_get_window(struct client *client)
+int client_get_window(const client_t client_id, Window *window)
 {
-	return(client->window);
+	struct client *client;
+	int err;
+
+	if (!window) {
+		return -EINVAL;
+	}
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
+	}
+
+	*window = client->window;
+	return 0;
 }
 
-int client_redraw(struct client *client)
+int client_redraw(const client_t client_id)
 {
-	if (!client) {
-		return -EINVAL;
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	if (client->geom.changed) {
@@ -116,7 +180,7 @@ int client_redraw(struct client *client)
 	 * If the client should be visible, map it to the display and move/resize
 	 * it as needed. Otherwise, move them outside of the visible area.
 	 */
-	if (client_is_visible(client)) {
+	if (client_is_visible(client_id)) {
 		XMapRaised(mwm_get_display(), client->window);
 		XMoveResizeWindow(mwm_get_display(), client->window,
 		                  client->geom.current.x, client->geom.current.y,
@@ -132,55 +196,72 @@ int client_redraw(struct client *client)
 	return 0;
 }
 
-int client_set_workspace(struct client *client, struct workspace *workspace)
+int client_set_workspace(const client_t client_id, struct workspace *workspace)
 {
-	if(!client || !workspace) {
-		return(-EINVAL);
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	client->workspace = workspace;
-	return(0);
+	return 0;
 }
 
-struct workspace* client_get_workspace(struct client *client)
+int client_get_workspace(const client_t client_id, struct workspace **workspace)
 {
-	return(client->workspace);
+	struct client *client;
+	int err;
+
+	if (!workspace) {
+		return -EINVAL;
+	}
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
+	}
+
+	*workspace = client->workspace;
+	return 0;
 }
 
-int client_is_visible(struct client *client)
+int client_is_visible(const client_t client_id)
 {
 	struct workspace *workspace;
 
-	workspace = client_get_workspace(client);
+	workspace = NULL;
 
-	if(!workspace) {
-		return(FALSE);
-	}
-
-	return(workspace_get_viewer(workspace) != NULL);
+	return client_get_workspace(client_id, &workspace) == 0 &&
+	       workspace != NULL &&
+	       workspace_get_viewer(workspace) != NULL;
 }
 
-int client_needs_redraw(struct client *client)
+int client_needs_redraw(const client_t client_id)
 {
-	if(!client) {
-		return(-EINVAL);
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	client->needs_redraw = 1;
 	workspace_needs_redraw(client->workspace);
 
-	return(0);
+	return 0;
 }
 
-int client_focus(struct client *client)
+int client_focus(const client_t client_id)
 {
+	struct client *client;
 	Display *display;
 	struct geom pointer;
 	struct geom extents;
 	int err;
 
-	if (!client) {
-		return -EINVAL;
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	display = mwm_get_display();
@@ -204,18 +285,19 @@ int client_focus(struct client *client)
 	extents.h = client->geom.current.h + 1;
 
 	if (!geom_contains(&extents, &pointer)) {
-		client_restore_pointer(client);
+		client_restore_pointer(client_id);
 	}
 
 	return 0;
 }
 
-int client_save_pointer(struct client *client)
+int client_save_pointer(const client_t client_id)
 {
+	struct client *client;
 	int err;
 
-	if (!client) {
-		return -EINVAL;
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
 	}
 
 	if ((err = mwm_get_pointer(&client->pointer)) < 0) {
@@ -263,9 +345,15 @@ static void _client_scale_pointer(struct client *client)
 	return;
 }
 
-int client_restore_pointer(struct client *client)
+int client_restore_pointer(const client_t client_id)
 {
+	struct client *client;
 	Display *display;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
+	}
 
 	display = mwm_get_display();
 
@@ -291,22 +379,28 @@ int client_restore_pointer(struct client *client)
 	return 0;
 }
 
-int client_set_state(struct client *client, const long state)
+int client_set_state(const client_t client_id, const long state)
 {
+	struct client *client;
 	long wm_state;
         long data[2];
+        int err;
+
+        if ((err = __get_client(&client, client_id)) < 0) {
+	        return err;
+        }
 
 	data[0] = state;
 	data[1] = None;
 
 	if(mwm_get_atom_by_name("WM_STATE", (Atom*)&wm_state) < 0) {
-		return(-EIO);
+		return -EIO;
 	}
 
         XChangeProperty(mwm_get_display(), client->window,
 			wm_state, wm_state, 32,
 			PropModeReplace, (unsigned char*)data, 2);
-        return(0);
+        return 0;
 }
 
 static void _client_update_wm_hints(struct client *client)
@@ -349,7 +443,7 @@ static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
 
 	free(client->hint);
 	client->hint = hint;
-	client_needs_redraw(client);
+	client_needs_redraw(client->id);
 
 	if (client->workspace) {
 		workspace_needs_redraw(client->workspace);
@@ -358,8 +452,15 @@ static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
 	return 0;
 }
 
-void client_property_notify(struct client *client, XPropertyEvent *event)
+int client_property_notify(const client_t client_id, XPropertyEvent *event)
 {
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
+	}
+
 	switch (event->atom) {
 	case XA_WM_TRANSIENT_FOR:
 		if (client->workspace) {
@@ -379,18 +480,36 @@ void client_property_notify(struct client *client, XPropertyEvent *event)
 		_client_update_mwm_hint(client, event);
 		break;
 	}
+
+	return 0;
 }
 
-const char* client_get_hint(struct client *client)
+int client_get_hint(const client_t client_id, const char **hint)
 {
-	return client->hint;
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		return err;
+	}
+
+	*hint = client->hint;
+	return 0;
 }
 
 #if MWM_DEBUG
-void client_dump(struct client *client)
+int client_dump(const client_t client_id)
 {
+	struct client *client;
+	int err;
+
+	if ((err = __get_client(&client, client_id)) < 0) {
+		fprintf(stderr, "    Client %ld INVALID\n", client_id);
+		return err;
+	}
+
 	fprintf(stderr,
-	        "    Client %p\n"
+	        "    Client %ld @ %p\n"
 	        "      Window %lx\n"
 	        "      Current geometry: %dx%d @ %dx%d\n"
 	        "      Next geometry:    %dx%d @ %dx%d\n"
@@ -399,7 +518,7 @@ void client_dump(struct client *client)
 	        "      Needs redraw:     %d\n"
 	        "      Workspace:        %p\n"
 	        "      Hint:             %s\n",
-	        (void*)client,
+	        client_id, (void*)client,
 	        client->window,
 	        client->geom.current.w, client->geom.current.h, client->geom.current.x, client->geom.current.y,
 	        client->geom.next.w, client->geom.next.h, client->geom.next.x, client->geom.next.y,
@@ -408,5 +527,6 @@ void client_dump(struct client *client)
 	        client->needs_redraw,
 	        (void*)client->workspace,
 	        client->hint ? client->hint : "(none)");
+	return 0;
 }
 #endif /* MWM_DEBUG */
