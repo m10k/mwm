@@ -31,7 +31,6 @@
 typedef void (_mwm_xhandler_t)(XEvent*);
 
 #define FIND_MONITOR_BY_ID       ((int(*)(void*, void*))_cmp_monitor_id)
-#define FIND_CLIENT_BY_WINDOW    ((int(*)(struct client*, void*))_cmp_client_window)
 #define FIND_MONITOR_BY_WINDOW   ((int(*)(void*, void*))_cmp_monitor_contains_window)
 #define FIND_MONITOR_BY_GEOM     ((int(*)(void*, void*))_cmp_monitor_contains_geom)
 #define FIND_WORKSPACE_BY_VIEWER ((int(*)(void*, void*))_cmp_workspace_viewer)
@@ -66,7 +65,7 @@ struct mwm {
 		int changed;
 	} focus;
 
-	struct client *focused_client;
+	client_t focused_client;
 
 	struct xrandr *xrandr;
 
@@ -95,11 +94,6 @@ static int _xerror_nop(Display *display, XErrorEvent *event);
 
 static int mwm_new(struct mwm **mwm);
 static int mwm_free(struct mwm **mwm);
-
-static int _cmp_client_window(struct client *client, Window *window)
-{
-	return(client_get_window(client) == *window ? 0 : 1);
-}
 
 static int _cmp_monitor_id(struct monitor *mon, int *id)
 {
@@ -143,7 +137,7 @@ static int _cmp_workspace_number(struct workspace *workspace, int *number)
 static void _xev_configure_request(XEvent *event)
 {
 	XConfigureRequestEvent *configure_request;
-	struct client *client;
+	client_t client;
 
 	/*
 	 * This event is generated whenever the client attempts to resize itself.
@@ -158,8 +152,7 @@ static void _xev_configure_request(XEvent *event)
 
 	configure_request = &event->xconfigurerequest;
 
-	if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
-	                    &configure_request->window, &client) < 0) {
+	if ((client = client_of_window(configure_request->window)) < 0) {
 		XWindowChanges changes;
 		unsigned int value_mask;
 
@@ -175,7 +168,7 @@ static void _xev_configure_request(XEvent *event)
 		value_mask = configure_request->value_mask | CWBorderWidth;
 
 		XConfigureWindow(_mwm->display, configure_request->window,
-				 value_mask, &changes);
+		                 value_mask, &changes);
 	} else {
 		/* Clients don't get to choose their geometry */
 		client_set_state(client, NormalState);
@@ -209,15 +202,14 @@ static void _xev_configure_notify(XEvent *event)
 
 static void _xev_destroy_notify(XDestroyWindowEvent *event)
 {
-	struct client *client;
+	client_t client;
 
 	/* get the client and detach it */
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
-			   &event->window, &client) < 0) {
+	if ((client = client_of_window(event->window)) < 0) {
 		fprintf(stderr, "Couldn't find client\n");
 		return;
 	}
@@ -227,16 +219,15 @@ static void _xev_destroy_notify(XDestroyWindowEvent *event)
 		return;
 	}
 
-	client_free(&client);
+	client_free(client);
 	return;
 }
 
 static void _xev_enter_notify(XCrossingEvent *event)
 {
-	struct client *client;
+	client_t client;
 	struct monitor *monitor;
 
-	client = NULL;
 	monitor = NULL;
 
 	/* pointer has entered a window - move focus, if it makes sense */
@@ -249,8 +240,7 @@ static void _xev_enter_notify(XCrossingEvent *event)
 		return;
 	}
 
-	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
-			   &event->window, &client) == 0) {
+	if ((client = client_of_window(event->window)) >= 0) {
 		mwm_focus_client(client);
 	}
 
@@ -277,7 +267,7 @@ static void _xev_expose(XExposeEvent *event)
 	}
 
 	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_WINDOW,
-		     &event->window, (void**)&monitor) == 0) {
+	             &event->window, (void**)&monitor) == 0) {
 		monitor_needs_redraw(monitor);
 	}
 
@@ -286,21 +276,16 @@ static void _xev_expose(XExposeEvent *event)
 
 static void _xev_focus_in(XFocusInEvent *event)
 {
-	struct client *client;
+        client_t client;
 
 	/* move focus to the client referenced by the event */
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
-			   &event->window, &client) < 0) {
-		return;
+	if ((client = client_of_window(event->window)) >= 0) {
+		mwm_focus_client(client);
 	}
-
-	mwm_focus_client(client);
-
-	return;
 }
 
 static void _xev_key_press(XKeyEvent *event)
@@ -368,18 +353,17 @@ static void _xev_map_request(XMapRequestEvent *event)
 		return;
 	}
 
-	if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
-			   &event->window, NULL) < 0) {
-		struct client *client;
+	if (client_of_window(event->window) < 0) {
+		client_t client;
 
-		if(client_new(event->window, &client) < 0) {
+		if ((client = client_new(event->window)) < 0) {
 			/* ENOMEM */
 			return;
 		}
 
 		if(mwm_attach_client(client) < 0) {
 			/* ENOMEM */
-			client_free(&client);
+			client_free(client);
 			return;
 		}
 	}
@@ -428,10 +412,9 @@ static void _xev_property_notify(XPropertyEvent *event)
 		/* if(event->atom == XA_WM_NAME) */
 		mwm_needs_redraw();
 	} else {
-		struct client *event_client;
+		client_t event_client;
 
-		if (mwm_find_client(FIND_CLIENT_BY_WINDOW,
-				    &event->window, &event_client) == 0) {
+		if ((event_client = client_of_window(event->window)) >= 0) {
 			client_property_notify(event_client, event);
 		}
 	}
@@ -441,14 +424,13 @@ static void _xev_property_notify(XPropertyEvent *event)
 
 static void _xev_unmap_notify(XUnmapEvent *event)
 {
-	struct client *client;
+	client_t client;
 
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p)\n", __func__, (void*)event);
 #endif /* MWM_DEBUG */
 
-        if(mwm_find_client(FIND_CLIENT_BY_WINDOW,
-                           &event->window, &client) < 0) {
+	if ((client = client_of_window(event->window)) < 0) {
 		return;
 	}
 
@@ -460,7 +442,7 @@ static void _xev_unmap_notify(XUnmapEvent *event)
 
 	if(!event->send_event) {
 		mwm_detach_client(client);
-		client_free(&client);
+		client_free(client);
 	}
 
 	XSync(_mwm->display, False);
@@ -670,7 +652,7 @@ static void _handle_signal(int sig)
 	        "    Current focus:  %p\n"
 	        "    Next focus:     %p\n"
 	        "    Focus changed:  %d\n"
-	        "    Focused client: %p\n",
+	        "    Focused client: %ld\n",
 	        (void*)_mwm,
 	        _mwm->screen,
 	        _mwm->root,
@@ -680,7 +662,7 @@ static void _handle_signal(int sig)
 	        (void*)_mwm->focus.current,
 	        (void*)_mwm->focus.next,
 	        _mwm->focus.changed,
-	        (void*)_mwm->focused_client);
+	        _mwm->focused_client);
 
 	fprintf(stderr, "----- BEGIN monitors -----\n");
 	loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_dump);
@@ -729,11 +711,11 @@ static void _cmd_show_workspace(void *arg)
 	struct workspace *workspace;
 	long number;
 
-        number = (long)arg;
-        monitor = mwm_get_focused_monitor();
+	number = (long)arg;
+	monitor = mwm_get_focused_monitor();
 
 	if(loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
-		     (void*)&number, (void**)&workspace) < 0) {
+	             (void*)&number, (void**)&workspace) < 0) {
 		return;
 	}
 
@@ -745,13 +727,13 @@ static void _cmd_move_to_workspace(void *arg)
 {
 	struct workspace *src_workspace;
 	struct workspace *dst_workspace;
-	struct client *client;
+	client_t client;
 	long dst_number;
 
 	dst_number = (long)arg;
 	client = mwm_get_focused_client();
 
-	if (!client) {
+	if (client < 0) {
 		return;
 	}
 
@@ -760,10 +742,12 @@ static void _cmd_move_to_workspace(void *arg)
 		return;
 	}
 
-	src_workspace = client_get_workspace(client);
+	client_get_workspace(client, &src_workspace);
 
 	if (src_workspace != dst_workspace) {
-		workspace_detach_client(src_workspace, client);
+		if (src_workspace) {
+			workspace_detach_client(src_workspace, client);
+		}
 		workspace_attach_client(dst_workspace, client);
 	}
 
@@ -808,7 +792,7 @@ static void _cmd_shift_client(void *arg)
 	dir = (long)arg;
 
 	workspace = mwm_get_focused_workspace();
-	workspace_shift_client(workspace, NULL, dir);
+	workspace_shift_client(workspace, -1, dir);
 
 	return;
 }
@@ -839,9 +823,9 @@ static void _cmd_shift_monitor_focus(void *arg)
 	}
 
 	if (src_monitor != dst_monitor) {
-		struct client *src_client;
+		client_t src_client;
 
-		if ((src_client = monitor_get_focused_client(src_monitor))) {
+		if ((src_client = monitor_get_focused_client(src_monitor)) >= 0) {
 			client_save_pointer(src_client);
 		}
 
@@ -898,7 +882,7 @@ static void _cmd_quit(void *arg)
 
 static void _cmd_kbptr_move(void *arg)
 {
-	struct client *client;
+	client_t client;
 	long dir;
 
 	dir = (long)arg;
@@ -913,7 +897,7 @@ static void _cmd_kbptr_move(void *arg)
 
 static void _cmd_kbptr_click(void *arg)
 {
-	struct client *client;
+	client_t client;
 	long button;
 
 	button = (long)arg;
@@ -980,68 +964,68 @@ static int _xerror_handle(Display *display, XErrorEvent *event)
 
 static void _find_existing_clients(void)
 {
-        Window dontcare;
-        Window *windows;
-        Window *cur;
-        unsigned int num_windows;
+	Window dontcare;
+	Window *windows;
+	Window *cur;
+	unsigned int num_windows;
 
-        if (!XQueryTree(_mwm->display, _mwm->root, &dontcare, &dontcare, &windows, &num_windows)) {
-                return;
-        }
+	if (!XQueryTree(_mwm->display, _mwm->root, &dontcare, &dontcare, &windows, &num_windows)) {
+		return;
+	}
 
-        for (cur = windows; cur < windows + num_windows; cur++) {
-	        XWindowAttributes attrs;
+	for (cur = windows; cur < windows + num_windows; cur++) {
+		XWindowAttributes attrs;
 
-	        if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
-                        continue;
-                }
+		if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
+			continue;
+		}
 
-                if (attrs.override_redirect || XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
-                        continue;
-                }
+		if (attrs.override_redirect || XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
+			continue;
+		}
 
-                if (attrs.map_state == IsViewable /* || IconicState */ ) {
-                        struct client *client;
-                        int err;
+		if (attrs.map_state == IsViewable /* || IconicState */ ) {
+			client_t client;
+			int err;
 
-                        if ((err = client_new(*cur, &client)) < 0) {
-                                fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
-                        } else if ((err = mwm_attach_client(client)) < 0) {
-                                fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
-                                client_free(&client);
-                        }
-                }
-        }
+			if ((client = client_new(*cur)) < 0) {
+				fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-client));
+			} else if ((err = mwm_attach_client(client)) < 0) {
+				fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
+				client_free(client);
+			}
+		}
+	}
 
-        for (cur = windows; cur < windows + num_windows; cur++) {
-                XWindowAttributes attrs;
+	for (cur = windows; cur < windows + num_windows; cur++) {
+		XWindowAttributes attrs;
 
-                if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
-                        continue;
-                }
+		if (!XGetWindowAttributes(_mwm->display, *cur, &attrs)) {
+			continue;
+		}
 
-                if (!XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
-                        continue;
-                }
+		if (!XGetTransientForHint(_mwm->display, *cur, &dontcare)) {
+			continue;
+		}
 
-                if (attrs.map_state == IsViewable /* || IconicState */ ) {
-                        struct client *client;
-                        int err;
+		if (attrs.map_state == IsViewable /* || IconicState */ ) {
+			client_t client;
+			int err;
 
-                        if ((err = client_new(*cur, &client)) < 0) {
-                                fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-err));
-                        } else if ((err = mwm_attach_client(client)) < 0) {
-                                fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
-                                client_free(&client);
-                        }
-                }
-        }
+			if ((client = client_new(*cur)) < 0) {
+				fprintf(stderr, "%s: client_new: %s\n", __func__, strerror(-client));
+			} else if ((err = mwm_attach_client(client)) < 0) {
+				fprintf(stderr, "%s: mwm_attach_client: %s\n", __func__, strerror(-err));
+				client_free(client);
+			}
+		}
+	}
 
-        if (windows) {
-                XFree(windows);
-        }
+	if (windows) {
+		XFree(windows);
+	}
 
-        return;
+	return;
 }
 
 int mwm_init(void)
@@ -1243,7 +1227,7 @@ int mwm_run(void)
 	_mwm->running = 1;
 
 	while (_mwm->running) {
-		struct client *focused_client;
+		client_t focused_client;
 
 		/*
 		 * Handle as many events as possible before redrawing. This is necessary
@@ -1379,12 +1363,14 @@ struct monitor* mwm_get_focused_monitor(void)
 	return _mwm->focus.current;
 }
 
-int mwm_attach_client(struct client *client)
+int mwm_attach_client(const client_t client)
 {
 	struct workspace *workspace;
 	struct monitor *monitor;
+	Window window;
+	int err;
 
-	if (!client) {
+	if (client < 0) {
 		return -EINVAL;
 	}
 
@@ -1404,92 +1390,64 @@ int mwm_attach_client(struct client *client)
 	}
 
 #if MWM_DEBUG
-	fprintf(stderr, "Attaching client %p to workspace %p\n",
-		(void*)client, (void*)workspace);
+	fprintf(stderr, "Attaching client %ld to workspace %p\n",
+		client, (void*)workspace);
 #endif /* MWM_DEBUG */
+	if ((err = client_get_window(client, &window)) < 0) {
+		return err;
+	}
 
-        XSelectInput(_mwm->display, client_get_window(client),
-                     EnterWindowMask | FocusChangeMask |
-                     PropertyChangeMask | StructureNotifyMask);
+	XSelectInput(_mwm->display, window,
+	             EnterWindowMask | FocusChangeMask |
+	             PropertyChangeMask | StructureNotifyMask);
 
 	client_set_state(client, NormalState);
 
 	return workspace_attach_client(workspace, client);
 }
 
-int mwm_detach_client(struct client *client)
+int mwm_detach_client(const client_t client)
 {
 	struct workspace *workspace;
+	int err;
 
-	if (!client) {
+	if (client < 0) {
 		return -EINVAL;
 	}
 
-	workspace = client_get_workspace(client);
-	workspace_detach_client(workspace, client);
+	if ((err = client_get_workspace(client, &workspace)) < 0) {
+		return err;
+	}
 
-	return 0;
+	return workspace_detach_client(workspace, client);
 }
 
-int mwm_focus_client(struct client *client)
+int mwm_focus_client(const client_t client)
 {
 	struct workspace *workspace;
 
-	if(client) {
-		workspace = client_get_workspace(client);
-	} else {
+	if (client_get_workspace(client, &workspace) < 0) {
 		workspace = mwm_get_focused_workspace();
 	}
 
 	if(!workspace) {
-		return(-EBADFD);
+		return -EBADFD;
 	}
 
-	return(workspace_focus_client(workspace, client));
+	return workspace_focus_client(workspace, client);
 }
 
-struct client* mwm_get_focused_client(void)
+client_t mwm_get_focused_client(void)
 {
 	struct monitor *focused_monitor;
 
 	focused_monitor = mwm_get_focused_monitor();
 
-	if(!focused_monitor) {
-		return(NULL);
+	if (!focused_monitor) {
+		return -1;
 	}
 
-	return(monitor_get_focused_client(focused_monitor));
-}
-
-struct find_client_args {
-	int (*cmp)(struct client*, void*);
-	void *data;
-	struct client **dst;
-	int err;
-};
-
-int _find_client_in_workspace(struct workspace *workspace, struct find_client_args *args)
-{
-	args->err = workspace_find_client(workspace, args->cmp, args->data, args->dst);
-
-	/* abort the loop if the client was found */
-	return args->err == 0 ? -1 : 0;
-}
-
-int mwm_find_client(int(*cmp)(struct client*, void*),
-		    void *data, struct client **client)
-{
-	struct find_client_args args;
-
-	args.cmp = cmp;
-	args.data = data;
-	args.dst = client;
-	args.err = -ENOENT;
-
-	loop_foreach_with_data(&_mwm->workspaces, (int(*)(void*, void*))_find_client_in_workspace,
-	                       &args);
-
-	return args.err;
+	return monitor_get_focused_client(focused_monitor);
 }
 
 struct workspace *mwm_get_focused_workspace(void)

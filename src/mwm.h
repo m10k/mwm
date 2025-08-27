@@ -5,10 +5,10 @@
 #include <X11/Xft/Xft.h>
 #include "theme.h"
 #include "common.h"
+#include "client.h"
 
 struct mwm;
 struct monitor;
-struct client;
 struct workspace;
 
 typedef enum {
@@ -50,12 +50,10 @@ struct monitor* mwm_get_focused_monitor(void);
 int mwm_find_monitor(int (*cmp)(struct monitor*, void*),
                      void*, struct monitor**);
 
-int mwm_attach_client(struct client *client);
-int mwm_detach_client(struct client *client);
-int mwm_focus_client(struct client *client);
-struct client* mwm_get_focused_client(void);
-int mwm_find_client(int (*cmp)(struct client*, void*),
-                    void*, struct client**);
+int mwm_attach_client(const client_t client);
+int mwm_detach_client(const client_t client);
+int mwm_focus_client(const client_t client);
+client_t mwm_get_focused_client(void);
 
 int mwm_attach_workspace(struct workspace *workspace);
 int mwm_detach_workspace(struct workspace *workspace);
