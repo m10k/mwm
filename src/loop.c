@@ -303,28 +303,28 @@ int loop_get_next(struct loop **loop, void *data, void **next)
 {
 	struct loop *iter;
 
-	if(!loop || !data || !next) {
-		return(-EINVAL);
+	if (!loop || !next) {
+		return -EINVAL;
 	}
 
-	if(__loop_find(loop, NULL, data, &iter) < 0) {
-		return(-ENOENT);
+	if (__loop_find(loop, NULL, data, &iter) < 0) {
+		return -ENOENT;
 	}
 
 	*next = iter->next->data;
-	return(0);
+	return 0;
 }
 
 int loop_get_prev(struct loop **loop, void *data, void **prev)
 {
 	struct loop *iter;
 
-	if(!loop || !data || !prev) {
-		return(-EINVAL);
+	if (!loop || !prev) {
+		return -EINVAL;
 	}
 
-	if(__loop_find(loop, NULL, data, &iter) < 0) {
-		return(-ENOENT);
+	if (__loop_find(loop, NULL, data, &iter) < 0) {
+		return -ENOENT;
 	}
 
 	*prev = iter->prev->data;
@@ -337,12 +337,12 @@ int loop_shift_forwards(struct loop **loop, void *data)
 	struct loop *next;
 	void *swap;
 
-	if(!loop || !data) {
-		return(-EINVAL);
+	if (!loop) {
+		return -EINVAL;
 	}
 
-	if(__loop_find(loop, NULL, data, &iter) < 0) {
-		return(-ENOENT);
+	if (__loop_find(loop, NULL, data, &iter) < 0) {
+		return -ENOENT;
 	}
 
 	next = iter->next;
@@ -351,7 +351,7 @@ int loop_shift_forwards(struct loop **loop, void *data)
 	next->data = iter->data;
 	iter->data = swap;
 
-	return(0);
+	return 0;
 }
 
 int loop_shift_backwards(struct loop **loop, void *data)
@@ -360,12 +360,12 @@ int loop_shift_backwards(struct loop **loop, void *data)
 	struct loop *prev;
 	void *swap;
 
-	if(!loop || !data) {
-		return(-EINVAL);
+	if (!loop) {
+		return -EINVAL;
 	}
 
-	if(__loop_find(loop, NULL, data, &iter) < 0) {
-		return(-ENOENT);
+	if (__loop_find(loop, NULL, data, &iter) < 0) {
+		return -ENOENT;
 	}
 
 	prev = iter->prev;
@@ -374,5 +374,5 @@ int loop_shift_backwards(struct loop **loop, void *data)
 	prev->data = iter->data;
 	iter->data = swap;
 
-	return(0);
+	return 0;
 }
