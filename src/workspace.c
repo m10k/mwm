@@ -14,8 +14,8 @@ struct workspace {
 	struct loop *clients;
 
 	struct {
-		struct client *current;
-		struct client *next;
+	        client_t current;
+	        client_t next;
 		int changed;
 	} focus;
 
@@ -73,19 +73,19 @@ int workspace_get_number(struct workspace *workspace)
 	return workspace->number;
 }
 
-int workspace_attach_client(struct workspace *workspace, struct client *client)
+int workspace_attach_client(struct workspace *workspace, const client_t client)
 {
-	if (!workspace || !client) {
+	if (!workspace || client < 0) {
 		return -EINVAL;
 	}
 
-	if (loop_append(&workspace->clients, client) < 0) {
+	if (loop_append(&workspace->clients, (void*)client) < 0) {
 		return -ENOMEM;
 	}
 
 	client_set_workspace(client, workspace);
 
-	if (!workspace_get_focused_client(workspace)) {
+	if (workspace_get_focused_client(workspace) < 0) {
 		workspace_focus_client(workspace, client);
 	}
 
@@ -95,29 +95,29 @@ int workspace_attach_client(struct workspace *workspace, struct client *client)
 }
 
 
-int workspace_detach_client(struct workspace *workspace, struct client *client)
+int workspace_detach_client(struct workspace *workspace, const client_t client)
 {
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)workspace, (void*)client);
+	fprintf(stderr, "%s(%p, %ld)\n", __func__, (void*)workspace, client);
 #endif /* MWM_DEBUG */
 
-	if (!workspace || !client) {
+	if (!workspace || client < 0) {
 		return -EINVAL;
 	}
 
 	if (workspace->focus.next == client) {
 		/* don't change the focus if this client was supposed to be focused */
-		workspace->focus.next = NULL;
+		workspace->focus.next = -1;
 		workspace->focus.changed = 0;
 	}
 
 	if (workspace->focus.current == client) {
-		struct client *next;
+		client_t next;
 		int err;
 
 		/* if the client was focused, figure out who gets the focus next */
 
-		err = loop_get_next(&workspace->clients, client, (void**)&next);
+		err = loop_get_next(&workspace->clients, (void*)client, (void**)&next);
 
 		if (err < 0) {
 			/*
@@ -131,15 +131,15 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 			return err;
 		}
 
-		err = loop_remove(&workspace->clients, client);
+		err = loop_remove(&workspace->clients, (void*)client);
 
 		if (err < 0) {
 			/*
 			 * If client wasn't on this workspace, the branch above should have been
 			 * visited. So if we get here, something even nastier is going on.
 			 */
-			fprintf(stderr, "%s: BUG: Client %p was not on this workspace.\n",
-			        __func__, (void*)client);
+			fprintf(stderr, "%s: BUG: Client %ld was not on this workspace.\n",
+			        __func__, client);
 			fprintf(stderr, "%s: loop_remove: %s\n", __func__, strerror(-err));
 
 			return err;
@@ -147,7 +147,7 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 
 		if (next == client) {
 			/* nothing left to focus on */
-			next = NULL;
+			next = -1;
 		}
 
 		workspace_focus_client(workspace, next);
@@ -159,8 +159,8 @@ int workspace_detach_client(struct workspace *workspace, struct client *client)
 }
 
 int workspace_find_client(struct workspace *workspace,
-			  int (*cmp)(struct client*, void*),
-			  void *data, struct client **client)
+			  int (*cmp)(const client_t, void*),
+			  void *data, client_t *client)
 {
 	if (!workspace) {
 		return -EINVAL;
@@ -191,7 +191,7 @@ struct monitor* workspace_get_viewer(struct workspace *workspace)
 	return workspace->viewer.current;
 }
 
-int workspace_focus_client(struct workspace *workspace, struct client *client)
+int workspace_focus_client(struct workspace *workspace, const client_t client)
 {
 	if (!workspace) {
 		return -EINVAL;
@@ -208,25 +208,25 @@ int workspace_focus_client(struct workspace *workspace, struct client *client)
 	return 0;
 }
 
-struct client* workspace_get_focused_client(struct workspace *workspace)
+client_t workspace_get_focused_client(struct workspace *workspace)
 {
 	return workspace->focus.current;
 }
 
 struct workspace_foreach_client_args {
-	int (*func)(struct workspace*, struct client*, void*);
+	int (*func)(struct workspace*, const client_t, void*);
 	struct workspace *workspace;
 	void *data;
 };
 
-static int _workspace_foreach_client_call(struct client *client,
+static int _workspace_foreach_client_call(void *client,
                                           struct workspace_foreach_client_args *args)
 {
-	return args->func(args->workspace, client, args->data);
+	return args->func(args->workspace, (client_t)client, args->data);
 }
 
 int workspace_foreach_client(struct workspace *workspace,
-			     int (*func)(struct workspace*, struct client*, void*),
+			     int (*func)(struct workspace*, const client_t, void*),
 			     void *data)
 {
 	struct workspace_foreach_client_args args;
@@ -291,20 +291,20 @@ int workspace_count_clients(struct workspace *workspace)
 
 int workspace_shift_focus(struct workspace *workspace, int dir)
 {
-	struct client *old_focus;
-	struct client *new_focus;
+	client_t old_focus;
+	client_t new_focus;
 
 	if (!workspace || dir == 0) {
 		return -EINVAL;
 	}
 
 	if (dir > 0) {
-		if (loop_get_next(&workspace->clients, workspace->focus.current,
+		if (loop_get_next(&workspace->clients, (void*)workspace->focus.current,
 				 (void**)&new_focus) < 0) {
 			return -EFAULT;
 		}
 	} else {
-		if (loop_get_prev(&workspace->clients, workspace->focus.current,
+		if (loop_get_prev(&workspace->clients, (void*)workspace->focus.current,
 				 (void**)&new_focus) < 0) {
 			return -EFAULT;
 		}
@@ -320,13 +320,13 @@ int workspace_shift_focus(struct workspace *workspace, int dir)
 	return 0;
 }
 
-int workspace_shift_client(struct workspace *workspace, struct client *client, int dir)
+int workspace_shift_client(struct workspace *workspace, const client_t client, int dir)
 {
-	struct client *shift;
+	client_t shift;
 	int err;
 
 #if MWM_DEBUG
-	printf("%s(%p, %p, %d)\n", __func__, (void*)workspace, (void*)client, dir);
+	printf("%s(%p, %ld, %d)\n", __func__, (void*)workspace, client, dir);
 #endif /* MWM_DEBUG */
 
 	if (!workspace || dir == 0) {
@@ -335,12 +335,12 @@ int workspace_shift_client(struct workspace *workspace, struct client *client, i
 
 	shift = client ? client : workspace->focus.current;
 
-	if (!shift) {
+	if (shift < 0) {
 		return -ENOENT;
 	}
 
-	err = (dir > 0) ? loop_shift_forwards(&workspace->clients, shift) :
-		loop_shift_backwards(&workspace->clients, shift);
+	err = (dir > 0) ? loop_shift_forwards(&workspace->clients, (void*)shift) :
+		loop_shift_backwards(&workspace->clients, (void*)shift);
 
 	if (!err) {
 		workspace_needs_redraw(workspace);
@@ -355,15 +355,15 @@ void workspace_dump(struct workspace *workspace)
 	fprintf(stderr,
 	        "  Workspace %p\n"
 	        "    Number:          %d\n"
-	        "    Current focus:   %p\n"
-	        "    Next focus:      %p\n"
+	        "    Current focus:   %ld\n"
+	        "    Next focus:      %ld\n"
 	        "    Current monitor: %p\n"
 	        "    Next monitor:    %p\n"
 	        "    Needs redraw:    %d\n",
 	        (void*)workspace,
 	        workspace->number,
-	        (void*)workspace->focus.current,
-	        (void*)workspace->focus.next,
+	        workspace->focus.current,
+	        workspace->focus.next,
 	        (void*)workspace->viewer.current,
 	        (void*)workspace->viewer.next,
 	        workspace->needs_redraw);
