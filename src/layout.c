@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include "monitor.h"
@@ -11,7 +10,7 @@
 
 struct layout {
 	char *name;
-	int (*arrange)(struct client*, struct geom*, int, int);
+	int (*arrange)(const client_t, struct geom*, int, int);
 	layout_orientation_t orientation;
 };
 
@@ -22,15 +21,15 @@ struct layout_args {
 	struct geom usable_area;
 };
 
-static int bookshelf(struct client *client, struct geom *unallocated,
+static int bookshelf(const client_t client, struct geom *unallocated,
 		     int arranged_clients, int total_clients);
-static int bookstack(struct client *client, struct geom *unallocated,
+static int bookstack(const client_t client, struct geom *unallocated,
 		     int arranged_clients, int total_clients);
-static int sink(struct client *client, struct geom *unallocated,
+static int sink(const client_t client, struct geom *unallocated,
 		int arranged_clients, int total_clients);
-static int geom_bookshelf(struct client *client, struct geom *unallocated,
+static int geom_bookshelf(const client_t client, struct geom *unallocated,
                           int arranged_clients, int total_clients);
-static int geom_bookstack(struct client *client, struct geom *unallocated,
+static int geom_bookstack(const client_t client, struct geom *unallocated,
                           int arranged_clients, int total_clients);
 
 static struct layout layout_bookshelf = {
@@ -72,7 +71,7 @@ struct layout *layouts[] = {
 	NULL
 };
 
-static int bookshelf(struct client *client, struct geom *unallocated,
+static int bookshelf(const client_t client, struct geom *unallocated,
 		     int arranged_clients, int total_clients)
 {
 	struct geom geom;
@@ -91,7 +90,7 @@ static int bookshelf(struct client *client, struct geom *unallocated,
 	return(client_set_geometry(client, &geom));
 }
 
-static int bookstack(struct client *client, struct geom *unallocated,
+static int bookstack(const client_t client, struct geom *unallocated,
 		     int arranged_clients, int total_clients)
 {
 	struct geom geom;
@@ -110,7 +109,7 @@ static int bookstack(struct client *client, struct geom *unallocated,
 	return(client_set_geometry(client, &geom));
 }
 
-static int sink(struct client *client, struct geom *unallocated,
+static int sink(const client_t client, struct geom *unallocated,
                 int arranged_clients, int total_clients)
 {
 	struct geom geom;
@@ -242,7 +241,7 @@ static int sink(struct client *client, struct geom *unallocated,
 	return client_set_geometry(client, &geom);
 }
 
-static int geom_bookshelf(struct client *client, struct geom *unallocated,
+static int geom_bookshelf(const client_t client, struct geom *unallocated,
                           int arranged_clients, int total_clients)
 {
 	struct geom geom;
@@ -263,7 +262,7 @@ static int geom_bookshelf(struct client *client, struct geom *unallocated,
 	return(client_set_geometry(client, &geom));
 }
 
-static int geom_bookstack(struct client *client, struct geom *unallocated,
+static int geom_bookstack(const client_t client, struct geom *unallocated,
                           int arranged_clients, int total_clients)
 {
 	struct geom geom;
@@ -284,13 +283,13 @@ static int geom_bookstack(struct client *client, struct geom *unallocated,
 	return(client_set_geometry(client, &geom));
 }
 
-int _arrange_workspace(struct workspace *workspace, struct client *client,
+int _arrange_workspace(struct workspace *workspace, const client_t client,
 		       void *data)
 {
 	struct layout_args *args;
 
-	if(!workspace || !client || !data) {
-		return(-EINVAL);
+	if (!workspace || client < 0 || !data) {
+		return -EINVAL;
 	}
 
 	args = (struct layout_args*)data;
@@ -300,7 +299,7 @@ int _arrange_workspace(struct workspace *workspace, struct client *client,
 			      args->total_clients);
 	args->arranged_clients++;
 
-	return(0);
+	return 0;
 }
 
 int layout_arrange(struct layout *layout,
