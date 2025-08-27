@@ -2,6 +2,7 @@
 #define MONITOR_H 1
 
 #include "client.h"
+#include "xrandr.h"
 #include <X11/Xlib.h>
 
 struct monitor;
@@ -9,7 +10,7 @@ struct layout;
 struct workspace;
 struct geom;
 
-int monitor_new(int id, int x, int y, int w, int h,
+int monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h,
 		struct monitor **monitor);
 int monitor_free(struct monitor **monitor);
 
@@ -18,7 +19,7 @@ int monitor_set_layout(struct monitor *monitor,
 		       struct layout *layout);
 struct layout* monitor_get_layout(struct monitor *monitor);
 
-int monitor_get_id(struct monitor *monitor);
+xrandr_crtc_t monitor_get_crtc(struct monitor *monitor);
 
 int monitor_get_geometry(struct monitor *monitor, struct geom *geom);
 int monitor_set_geometry(struct monitor *monitor, struct geom *geom);

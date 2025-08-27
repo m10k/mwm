@@ -30,7 +30,7 @@
 
 typedef void (_mwm_xhandler_t)(XEvent*);
 
-#define FIND_MONITOR_BY_ID       ((int(*)(void*, void*))_cmp_monitor_id)
+#define FIND_MONITOR_BY_CRTC     ((int(*)(void*, void*))_cmp_monitor_crtc)
 #define FIND_MONITOR_BY_WINDOW   ((int(*)(void*, void*))_cmp_monitor_contains_window)
 #define FIND_MONITOR_BY_GEOM     ((int(*)(void*, void*))_cmp_monitor_contains_geom)
 #define FIND_WORKSPACE_BY_VIEWER ((int(*)(void*, void*))_cmp_workspace_viewer)
@@ -95,9 +95,9 @@ static int _xerror_nop(Display *display, XErrorEvent *event);
 static int mwm_new(struct mwm **mwm);
 static int mwm_free(struct mwm **mwm);
 
-static int _cmp_monitor_id(struct monitor *mon, int *id)
+static int _cmp_monitor_crtc(struct monitor *mon, xrandr_crtc_t *id)
 {
-	return(monitor_get_id(mon) == *id ? 0 : 1);
+	return(monitor_get_crtc(mon) == *id ? 0 : 1);
 }
 
 static int _cmp_monitor_contains_window(struct monitor *monitor, Window *window)
@@ -479,7 +479,7 @@ static void _detach_monitor(struct xrandr *xrr,
 {
 	struct monitor *mon;
 
-	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_CRTC, (void*)&crtc, (void**)&mon) < 0) {
 		fprintf(stderr, "Monitor %lx not attached\n", crtc);
 		return;
 	}
@@ -497,7 +497,7 @@ static void _change_monitor_geometry(struct xrandr *xrr,
 {
 	struct monitor *mon;
 
-	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_ID, (void*)&crtc, (void**)&mon) < 0) {
+	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_CRTC, (void*)&crtc, (void**)&mon) < 0) {
 		fprintf(stderr, "%s: Could not find monitor %lx\n", __func__, crtc);
 		return;
 	}

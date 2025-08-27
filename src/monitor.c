@@ -11,6 +11,7 @@
 #include "loop.h"
 #include "client.h"
 #include "layout.h"
+#include "xrandr.h"
 
 #define STATUSBAR_HEIGHT 32
 #define INDICATOR_HEIGHT 64
@@ -28,7 +29,7 @@ struct indicator {
 };
 
 struct monitor {
-	int id;
+	xrandr_crtc_t crtc;
 	Window statusbar;
 	Drawable draw_buffer;
 
@@ -223,7 +224,7 @@ int monitor_redraw_indicators(struct monitor *monitor)
 	return(0);
 }
 
-int monitor_new(int id, int x, int y, int w, int h,
+int monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h,
 		struct monitor **monitor)
 {
 	struct monitor *mon;
@@ -236,7 +237,7 @@ int monitor_new(int id, int x, int y, int w, int h,
 		return -ENOMEM;
 	}
 
-	mon->id = id;
+	mon->crtc = crtc;
 	mon->geom.current.x = x;
 	mon->geom.current.y = y;
 	mon->geom.current.w = w;
@@ -285,13 +286,13 @@ Display* monitor_get_display(struct monitor *monitor)
 	return mwm_get_display();
 }
 
-int monitor_get_id(struct monitor *monitor)
+xrandr_crtc_t monitor_get_crtc(struct monitor *monitor)
 {
-	if(!monitor) {
-		return(-EINVAL);
+	if (!monitor) {
+		return -EINVAL;
 	}
 
-	return(monitor->id);
+	return monitor->crtc;
 }
 
 int monitor_get_geometry(struct monitor *monitor, struct geom *geom)
@@ -315,8 +316,8 @@ int monitor_set_geometry(struct monitor *monitor, struct geom *geom)
 	}
 
 #if MWM_DEBUG
-	fprintf(stderr, "Setting geometry of monitor %x to %dx%d @ %dx%d\n",
-	        monitor->id, geom->w, geom->h, geom->x, geom->y);
+	fprintf(stderr, "Setting geometry of monitor 0x%lx to %dx%d @ %dx%d\n",
+	        monitor->crtc, geom->w, geom->h, geom->x, geom->y);
 #endif /* MWM_DEBUG */
 
 	memcpy(&monitor->geom.next, geom, sizeof(*geom));
@@ -664,12 +665,12 @@ void monitor_dump(struct monitor *monitor)
 {
 	fprintf(stderr,
 	        "  Monitor %p\n"
-	        "    Identifier:       0x%x\n"
+	        "    Identifier:       0x%lx\n"
 	        "    Current geometry: %dx%d @ %dx%d\n"
 	        "    Next geometry:    %dx%d @ %dx%d\n"
 	        "    Geometry changed: %d\n",
 	        (void*)monitor,
-	        monitor->id,
+	        monitor->crtc,
 	        monitor->geom.current.w, monitor->geom.current.h, monitor->geom.current.x, monitor->geom.current.y,
 	        monitor->geom.next.w, monitor->geom.next.h, monitor->geom.next.x, monitor->geom.next.y,
 	        monitor->geom.changed);
