@@ -117,7 +117,7 @@ void _indicator_set_visible(struct indicator *indicator, int visible, struct mon
 void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 {
 	struct workspace *workspace;
-	struct client *focused;
+	client_t focused;
 	Display *display;
 	Window root;
 	mwm_palette_t palette;
@@ -145,7 +145,10 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		unsigned long bg_color;
 		const char *hint;
 
-		if (!(hint = client_get_hint(focused))) {
+		hint = NULL;
+
+		client_get_hint(focused, &hint);
+		if (!hint) {
 			hint = "";
 		}
 		client_get_geometry(focused, &focus_pos);
@@ -377,17 +380,17 @@ struct workspace* monitor_get_workspace(struct monitor *monitor)
 	return monitor->workspace.current;
 }
 
-struct client* monitor_get_focused_client(struct monitor *monitor)
+client_t monitor_get_focused_client(struct monitor *monitor)
 {
 	struct workspace *workspace;
 
 	workspace = monitor_get_workspace(monitor);
 
-	if(!workspace) {
-		return(NULL);
+	if (!workspace) {
+		return -ENOMEDIUM;
 	}
 
-	return(workspace_get_focused_client(workspace));
+	return workspace_get_focused_client(workspace);
 }
 
 int monitor_arrange_clients(struct monitor *monitor)
@@ -436,7 +439,7 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *usable_area)
 	return 0;
 }
 
-int _draw_client(struct workspace *workspace, struct client *client, void *data)
+int _draw_client(struct workspace *workspace, const client_t client, void *data)
 {
 	client_redraw(client);
 	return(0);

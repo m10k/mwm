@@ -1,6 +1,7 @@
 #ifndef MONITOR_H
 #define MONITOR_H 1
 
+#include "client.h"
 #include <X11/Xlib.h>
 
 struct monitor;
@@ -26,7 +27,7 @@ int monitor_get_usable_area(struct monitor *monitor, struct geom *geom);
 int monitor_set_workspace(struct monitor *monitor, struct workspace *workspace);
 
 struct workspace* monitor_get_workspace(struct monitor *monitor);
-struct client* monitor_get_focused_client(struct monitor *monitor);
+client_t monitor_get_focused_client(struct monitor *monitor);
 
 int monitor_arrange_clients(struct monitor *monitor);
 int monitor_needs_redraw(struct monitor *monitor);
