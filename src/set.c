@@ -211,6 +211,8 @@ int set_get(struct set *set, const int idx, void **data)
 
 int set_nq(struct set *set, void *data)
 {
+	int idx;
+
 	if (!set) {
 		return -EINVAL;
 	}
@@ -220,8 +222,9 @@ int set_nq(struct set *set, void *data)
 		return -ENOMEM;
 	}
 
-	set->data[set->len++] = data;
-	return 0;
+	idx = set->len++;
+	set->data[idx] = data;
+	return idx;
 }
 
 int set_dq(struct set *set, void **data)
