@@ -6,9 +6,9 @@
 #include "theme.h"
 #include "common.h"
 #include "client.h"
+#include "monitor.h"
 
 struct mwm;
-struct monitor;
 struct workspace;
 
 typedef enum {
@@ -43,12 +43,10 @@ int mwm_redraw(void);
 Display* mwm_get_display(void);
 Window mwm_get_root_window(void);
 
-int mwm_attach_monitor(struct monitor *mon);
-int mwm_detach_monitor(struct monitor *mon);
-int mwm_focus_monitor(struct monitor *mon);
-struct monitor* mwm_get_focused_monitor(void);
-int mwm_find_monitor(int (*cmp)(struct monitor*, void*),
-                     void*, struct monitor**);
+int mwm_attach_monitor(const monitor_t monitor);
+int mwm_detach_monitor(const monitor_t monitor);
+int mwm_focus_monitor(const monitor_t monitor);
+monitor_t mwm_get_focused_monitor(void);
 
 int mwm_attach_client(const client_t client);
 int mwm_detach_client(const client_t client);

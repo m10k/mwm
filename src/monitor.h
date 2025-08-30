@@ -1,42 +1,48 @@
 #ifndef MONITOR_H
 #define MONITOR_H 1
 
+#include "common.h"
 #include "client.h"
 #include "xrandr.h"
 #include <X11/Xlib.h>
 
-struct monitor;
+typedef long monitor_t;
+
 struct layout;
 struct workspace;
-struct geom;
 
-int monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h,
-		struct monitor **monitor);
-int monitor_free(struct monitor **monitor);
+monitor_t monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h);
+int monitor_free(const monitor_t monitor_id);
 
-Display* monitor_get_display(struct monitor *monitor);
-int monitor_set_layout(struct monitor *monitor,
-		       struct layout *layout);
-struct layout* monitor_get_layout(struct monitor *monitor);
+Display* monitor_get_display(const monitor_t monitor_id);
+int monitor_set_layout(const monitor_t monitor_id, struct layout *layout);
+int monitor_get_layout(const monitor_t monitor_id, struct layout **layout);
 
-xrandr_crtc_t monitor_get_crtc(struct monitor *monitor);
+int monitor_get_crtc(const monitor_t monitor_id, xrandr_crtc_t *crtc);
 
-int monitor_get_geometry(struct monitor *monitor, struct geom *geom);
-int monitor_set_geometry(struct monitor *monitor, struct geom *geom);
-int monitor_get_usable_area(struct monitor *monitor, struct geom *geom);
+int monitor_get_geometry(const monitor_t monitor_id, struct geom *geom);
+int monitor_set_geometry(const monitor_t monitor_id, struct geom *geom);
+int monitor_get_usable_area(const monitor_t monitor_id, struct geom *geom);
 
-int monitor_set_workspace(struct monitor *monitor, struct workspace *workspace);
+int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspace);
+int monitor_get_workspace(const monitor_t monitor_id, struct workspace **workspace);
 
-struct workspace* monitor_get_workspace(struct monitor *monitor);
-client_t monitor_get_focused_client(struct monitor *monitor);
+int monitor_get_focused_client(const monitor_t monitor_id, client_t *client);
 
-int monitor_arrange_clients(struct monitor *monitor);
-int monitor_needs_redraw(struct monitor *monitor);
-int monitor_redraw(struct monitor *monitor);
-int monitor_is_focused(struct monitor *monitor);
+int monitor_arrange_clients(const monitor_t monitor_id);
+int monitor_needs_redraw(const monitor_t monitor_id);
+int monitor_redraw(const monitor_t monitor_id);
+int monitor_is_focused(const monitor_t monitor_id);
+
+int monitor_foreach(int(*func)(const monitor_t, void*), void *data);
+
+monitor_t monitor_of_window(const Window window);
+monitor_t monitor_of_crtc(const xrandr_crtc_t crtc);
+monitor_t monitor_at(const struct geom pos);
+monitor_t monitor_at_xy(const int x, const int y);
 
 #if MWM_DEBUG
-void monitor_dump(struct monitor *monitor);
+int monitor_dump(const monitor_t monitor_id);
 #endif /* MWM_DEBUG */
 
 #endif /* MONITOR_H */

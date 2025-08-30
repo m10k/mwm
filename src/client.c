@@ -234,7 +234,7 @@ int client_is_visible(const client_t client_id)
 
 	return client_get_workspace(client_id, &workspace) == 0 &&
 	       workspace != NULL &&
-	       workspace_get_viewer(workspace) != NULL;
+	       workspace_get_viewer(workspace) >= 0;
 }
 
 int client_needs_redraw(const client_t client_id)

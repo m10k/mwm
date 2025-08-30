@@ -2,8 +2,8 @@
 #define MWM_WORKSPACE_H 1
 
 #include "client.h"
+#include "monitor.h"
 
-struct monitor;
 struct workspace;
 
 int workspace_new(const int number, struct workspace **workspace);
@@ -23,8 +23,8 @@ int workspace_focus_client(struct workspace *workspace,
                            const client_t client);
 client_t workspace_get_focused_client(struct workspace *workspace);
 
-int workspace_set_viewer(struct workspace *workspace, struct monitor *viewer);
-struct monitor* workspace_get_viewer(struct workspace *workspace);
+int workspace_set_viewer(struct workspace *workspace, const monitor_t monitor);
+monitor_t workspace_get_viewer(struct workspace *workspace);
 
 int workspace_count_clients(struct workspace *workspace);
 int workspace_foreach_client(struct workspace *workspace,

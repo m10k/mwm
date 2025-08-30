@@ -8,8 +8,6 @@
 #include "loop.h"
 #include "common.h"
 
-struct monitor;
-
 struct workspace {
 	struct loop *clients;
 
@@ -20,8 +18,8 @@ struct workspace {
 	} focus;
 
 	struct {
-		struct monitor *current;
-		struct monitor *next;
+	        monitor_t current;
+	        monitor_t next;
 		int changed;
 	} viewer;
 
@@ -41,6 +39,10 @@ int workspace_new(const int number, struct workspace **workspace)
 		return -ENOMEM;
 	}
 
+	wspace->focus.current = -1;
+	wspace->focus.next = -1;
+	wspace->viewer.current = -1;
+	wspace->viewer.next = -1;
 	wspace->number = number;
 
 	*workspace = wspace;
@@ -170,7 +172,7 @@ int workspace_find_client(struct workspace *workspace,
 			 data, (void**)client);
 }
 
-int workspace_set_viewer(struct workspace *workspace, struct monitor *viewer)
+int workspace_set_viewer(struct workspace *workspace, const monitor_t viewer)
 {
 	if (!workspace) {
 		return -EINVAL;
@@ -186,7 +188,7 @@ int workspace_set_viewer(struct workspace *workspace, struct monitor *viewer)
 	return 0;
 }
 
-struct monitor* workspace_get_viewer(struct workspace *workspace)
+monitor_t workspace_get_viewer(struct workspace *workspace)
 {
 	return workspace->viewer.current;
 }
@@ -357,15 +359,15 @@ void workspace_dump(struct workspace *workspace)
 	        "    Number:          %d\n"
 	        "    Current focus:   %ld\n"
 	        "    Next focus:      %ld\n"
-	        "    Current monitor: %p\n"
-	        "    Next monitor:    %p\n"
+	        "    Current viewer:  %ld\n"
+	        "    Next viewer:     %ld\n"
 	        "    Needs redraw:    %d\n",
 	        (void*)workspace,
 	        workspace->number,
 	        workspace->focus.current,
 	        workspace->focus.next,
-	        (void*)workspace->viewer.current,
-	        (void*)workspace->viewer.next,
+	        workspace->viewer.current,
+	        workspace->viewer.next,
 	        workspace->needs_redraw);
 
 	loop_foreach(&workspace->clients, (void(*)(void*))client_dump);

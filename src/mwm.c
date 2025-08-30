@@ -30,9 +30,6 @@
 
 typedef void (_mwm_xhandler_t)(XEvent*);
 
-#define FIND_MONITOR_BY_CRTC     ((int(*)(void*, void*))_cmp_monitor_crtc)
-#define FIND_MONITOR_BY_WINDOW   ((int(*)(void*, void*))_cmp_monitor_contains_window)
-#define FIND_MONITOR_BY_GEOM     ((int(*)(void*, void*))_cmp_monitor_contains_geom)
 #define FIND_WORKSPACE_BY_VIEWER ((int(*)(void*, void*))_cmp_workspace_viewer)
 #define FIND_WORKSPACE_BY_NUMBER ((int(*)(void*, void*))_cmp_workspace_number)
 
@@ -60,8 +57,8 @@ struct mwm {
 	struct loop *workspaces;
 
 	struct {
-		struct monitor *current;
-		struct monitor *next;
+		monitor_t current;
+		monitor_t next;
 		int changed;
 	} focus;
 
@@ -95,38 +92,9 @@ static int _xerror_nop(Display *display, XErrorEvent *event);
 static int mwm_new(struct mwm **mwm);
 static int mwm_free(struct mwm **mwm);
 
-static int _cmp_monitor_crtc(struct monitor *mon, xrandr_crtc_t *id)
+static int _cmp_workspace_viewer(struct workspace *workspace, const monitor_t monitor)
 {
-	return(monitor_get_crtc(mon) == *id ? 0 : 1);
-}
-
-static int _cmp_monitor_contains_window(struct monitor *monitor, Window *window)
-{
-	struct geom window_geom;
-	struct geom monitor_geom;
-
-	if(x_get_geom(monitor_get_display(monitor), *window, &window_geom) < 0 ||
-	   monitor_get_geometry(monitor, &monitor_geom) < 0) {
-		return(-EFAULT);
-	}
-
-	return(geom_intersects(&monitor_geom, &window_geom) > 0 ? 0 : 1);
-}
-
-static int _cmp_monitor_contains_geom(struct monitor *monitor, struct geom *geom)
-{
-	struct geom monitor_geom;
-
-	if(monitor_get_geometry(monitor, &monitor_geom) < 0) {
-		return(-EFAULT);
-	}
-
-	return(geom_intersects(&monitor_geom, geom) > 0 ? 0 : 1);
-}
-
-static int _cmp_workspace_viewer(struct workspace *workspace, struct monitor *monitor)
-{
-	return(workspace_get_viewer(workspace) == monitor ? 0 : 1);
+	return workspace_get_viewer(workspace) == monitor ? 0 : 1;
 }
 
 static int _cmp_workspace_number(struct workspace *workspace, int *number)
@@ -210,12 +178,16 @@ static void _xev_destroy_notify(XDestroyWindowEvent *event)
 #endif /* MWM_DEBUG */
 
 	if ((client = client_of_window(event->window)) < 0) {
-		fprintf(stderr, "Couldn't find client\n");
+#if MWM_DEBUG
+		fprintf(stderr, "Couldn't find client of window 0x%lx\n", event->window);
+#endif /* MWM_DEBUG */
 		return;
 	}
 
 	if (mwm_detach_client(client) < 0) {
-		fprintf(stderr, "Couldn't detach client\n");
+#if MWM_DEBUG
+		fprintf(stderr, "Couldn't detach client %ld\n", client);
+#endif /* MWM_DEBUG */
 		return;
 	}
 
@@ -226,9 +198,7 @@ static void _xev_destroy_notify(XDestroyWindowEvent *event)
 static void _xev_enter_notify(XCrossingEvent *event)
 {
 	client_t client;
-	struct monitor *monitor;
-
-	monitor = NULL;
+	monitor_t monitor;
 
 	/* pointer has entered a window - move focus, if it makes sense */
 #if MWM_DEBUG
@@ -244,8 +214,7 @@ static void _xev_enter_notify(XCrossingEvent *event)
 		mwm_focus_client(client);
 	}
 
-	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_WINDOW,
-	             &event->window, (void**)&monitor) == 0) {
+	if ((monitor = monitor_of_window(event->window)) >= 0) {
 		mwm_focus_monitor(monitor);
 	}
 
@@ -254,7 +223,7 @@ static void _xev_enter_notify(XCrossingEvent *event)
 
 static void _xev_expose(XExposeEvent *event)
 {
-	struct monitor *monitor;
+	monitor_t monitor;
 
 #if MWM_DEBUG
 	fprintf(stderr, "%s(%p) W=0x%lx\n", __func__, (void*)event, event->window);
@@ -262,12 +231,11 @@ static void _xev_expose(XExposeEvent *event)
 
 	/* redraw the status bar, if we have one */
 
-	if(event->count > 0) {
+	if (event->count > 0) {
 		return;
 	}
 
-	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_WINDOW,
-	             &event->window, (void**)&monitor) == 0) {
+	if ((monitor = monitor_of_window(event->window)) >= 0) {
 		monitor_needs_redraw(monitor);
 	}
 
@@ -373,7 +341,7 @@ static void _xev_map_request(XMapRequestEvent *event)
 
 static void _xev_motion_notify(XMotionEvent *event)
 {
-	struct monitor *monitor;
+	monitor_t monitor;
 	struct geom pointer_geom;
 
 #if MWM_DEBUG
@@ -388,8 +356,7 @@ static void _xev_motion_notify(XMotionEvent *event)
 	pointer_geom.w = 1;
 	pointer_geom.h = 1;
 
-	if(loop_find(&_mwm->monitors, FIND_MONITOR_BY_GEOM,
-		     &pointer_geom, (void**)&monitor) < 0) {
+	if ((monitor = monitor_at(pointer_geom)) < 0) {
 		return;
 	}
 
@@ -457,16 +424,17 @@ static void _attach_monitor(struct xrandr *xrr,
                             struct geom *geom,
                             void *data)
 {
-	struct monitor *mon;
+	monitor_t monitor;
+	int err;
 
-	if (monitor_new(crtc, geom->x, geom->y, geom->w, geom->h, &mon) < 0) {
-		fprintf(stderr, "Ran out of memory trying to allocate a monitor\n");
+	if ((monitor = monitor_new(crtc, geom->x, geom->y, geom->w, geom->h)) < 0) {
+		fprintf(stderr, "Could not create monitor for CRTC 0x%lx: %s\n", crtc, strerror(-monitor));
 		return;
 	}
 
-	if (mwm_attach_monitor(mon) < 0) {
-		fprintf(stderr, "Could not attach monitor %lx\n", crtc);
-		monitor_free(&mon);
+	if ((err = mwm_attach_monitor(monitor)) < 0) {
+		fprintf(stderr, "Could not attach monitor for CRTC 0x%lx: %s\n", crtc, strerror(-err));
+		monitor_free(monitor);
 	}
 
 	return;
@@ -477,15 +445,15 @@ static void _detach_monitor(struct xrandr *xrr,
                             struct geom *geom,
                             void *data)
 {
-	struct monitor *mon;
+	monitor_t monitor;
 
-	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_CRTC, (void*)&crtc, (void**)&mon) < 0) {
-		fprintf(stderr, "Monitor %lx not attached\n", crtc);
+	if ((monitor = monitor_of_crtc(crtc)) < 0) {
+		fprintf(stderr, "Monitor of CRTC 0x%lx is not attached\n", crtc);
 		return;
 	}
 
-	mwm_detach_monitor(mon);
-	monitor_free(&mon);
+	mwm_detach_monitor(monitor);
+	monitor_free(monitor);
 
 	return;
 }
@@ -495,15 +463,17 @@ static void _change_monitor_geometry(struct xrandr *xrr,
                                      struct geom *geom,
                                      void *data)
 {
-	struct monitor *mon;
+	monitor_t monitor;
 
-	if (loop_find(&_mwm->monitors, FIND_MONITOR_BY_CRTC, (void*)&crtc, (void**)&mon) < 0) {
-		fprintf(stderr, "%s: Could not find monitor %lx\n", __func__, crtc);
+	if ((monitor = monitor_of_crtc(crtc)) < 0) {
+		fprintf(stderr, "Could not find monitor of CRTC 0x%lx: %s\n",
+		        crtc, strerror(-monitor));
 		return;
 	}
 
-	fprintf(stderr, "Crtc %lx changed geometry to [%dx%d @ %d,%d]\n", crtc, geom->w, geom->h, geom->x, geom->y);
-	monitor_set_geometry(mon, geom);
+	fprintf(stderr, "CRTC 0x%lx changed geometry to [%dx%d @ %d,%d]\n",
+	        crtc, geom->w, geom->h, geom->x, geom->y);
+	monitor_set_geometry(monitor, geom);
 	return;
 }
 
@@ -649,8 +619,8 @@ static void _handle_signal(int sig)
 	        "    Root geometry:  %dx%d @ %dx%d\n"
 	        "    Running:        %d\n"
 	        "    Needs redraw:   %d\n"
-	        "    Current focus:  %p\n"
-	        "    Next focus:     %p\n"
+	        "    Current focus:  %ld\n"
+	        "    Next focus:     %ld\n"
 	        "    Focus changed:  %d\n"
 	        "    Focused client: %ld\n",
 	        (void*)_mwm,
@@ -659,13 +629,13 @@ static void _handle_signal(int sig)
 	        _mwm->root_geom.w, _mwm->root_geom.h, _mwm->root_geom.x, _mwm->root_geom.y,
 	        _mwm->running,
 	        _mwm->needs_redraw,
-	        (void*)_mwm->focus.current,
-	        (void*)_mwm->focus.next,
+	        _mwm->focus.current,
+	        _mwm->focus.next,
 	        _mwm->focus.changed,
 	        _mwm->focused_client);
 
 	fprintf(stderr, "----- BEGIN monitors -----\n");
-	loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_dump);
+	monitor_foreach((int(*)(const monitor_t, void*))monitor_dump, NULL);
 	fprintf(stderr, "----- END monitors -----\n");
 
 	fprintf(stderr, "----- BEGIN workspaces -----\n");
@@ -707,7 +677,7 @@ static void _cmd_spawn(void *arg)
 
 static void _cmd_show_workspace(void *arg)
 {
-	struct monitor *monitor;
+	monitor_t monitor;
 	struct workspace *workspace;
 	long number;
 
@@ -757,13 +727,16 @@ static void _cmd_move_to_workspace(void *arg)
 static void _cmd_set_layout(void *arg)
 {
 	extern struct layout *layouts[];
-	struct monitor *monitor;
+	struct layout *layout;
+	monitor_t monitor;
 	long num;
+	int err;
 
 	num = (long)arg;
 	monitor = mwm_get_focused_monitor();
 
-	if (monitor_get_layout(monitor) != layouts[num]) {
+	err = monitor_get_layout(monitor, &layout);
+	if (!err && layout != layouts[num]) {
 		monitor_set_layout(monitor, layouts[num]);
 		monitor_needs_redraw(monitor);
 	}
@@ -799,8 +772,9 @@ static void _cmd_shift_client(void *arg)
 
 static void _cmd_shift_monitor_focus(void *arg)
 {
-	struct monitor *src_monitor;
-	struct monitor *dst_monitor;
+	monitor_t src_monitor;
+	monitor_t dst_monitor;
+	client_t src_client;
 	long dir;
 
 	dir = (long)arg;
@@ -811,65 +785,36 @@ static void _cmd_shift_monitor_focus(void *arg)
 	}
 
 	src_monitor = mwm_get_focused_monitor();
+	dst_monitor = src_monitor + dir;
 
-	if (dir > 0) {
-		if (loop_get_next(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
-			return;
-		}
-	} else {
-		if (loop_get_prev(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
-			return;
-		}
+	if (monitor_get_focused_client(src_monitor, &src_client) && src_client >= 0) {
+		client_save_pointer(src_client);
 	}
 
-	if (src_monitor != dst_monitor) {
-		client_t src_client;
-
-		if ((src_client = monitor_get_focused_client(src_monitor)) >= 0) {
-			client_save_pointer(src_client);
-		}
-
-		mwm_focus_monitor(dst_monitor);
-
-		monitor_needs_redraw(src_monitor);
-		monitor_needs_redraw(dst_monitor);
-	}
-
+	mwm_focus_monitor(dst_monitor);
+	monitor_needs_redraw(src_monitor);
+	monitor_needs_redraw(dst_monitor);
 	return;
 }
 
 static void _cmd_shift_workspace(void *arg)
 {
-	struct monitor *src_monitor;
-	struct monitor *dst_monitor;
+	monitor_t src_monitor;
+	monitor_t dst_monitor;
 	struct workspace *workspace;
 	long dir;
 
-	/* move workspace to the next or previous monitor */
+	/* move workspace to another monitor */
 
 	dir = (long)arg;
-
-	if (dir == 0) {
-		return;
-	}
+	workspace = NULL;
 
 	src_monitor = mwm_get_focused_monitor();
-	workspace = monitor_get_workspace(src_monitor);
+	dst_monitor = src_monitor + dir;
 
-	if (dir > 0) {
-		if (loop_get_next(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
-			return;
-		}
-	} else {
-		if (loop_get_prev(&_mwm->monitors, src_monitor, (void**)&dst_monitor) < 0) {
-			return;
-		}
-	}
-
-	if (src_monitor != dst_monitor) {
-		monitor_set_workspace(dst_monitor, workspace);
-		mwm_focus_monitor(dst_monitor);
-	}
+	monitor_get_workspace(src_monitor, &workspace);
+	monitor_set_workspace(dst_monitor, workspace);
+	mwm_focus_monitor(dst_monitor);
 
 	return;
 }
@@ -1276,78 +1221,69 @@ int mwm_stop(void)
 	return 0;
 }
 
-int mwm_attach_monitor(struct monitor *mon)
+int mwm_attach_monitor(const monitor_t monitor)
 {
 	struct workspace *unviewed;
 
-	if (!mon) {
-		return(-EINVAL);
+	unviewed = NULL;
+
+	if (monitor < 0) {
+		return -EINVAL;
 	}
 
-	if (loop_append(&_mwm->monitors, mon) < 0) {
-		return -ENOMEM;
+	if (mwm_get_focused_monitor() < 0) {
+		mwm_focus_monitor(monitor);
 	}
 
-	if (!mwm_get_focused_monitor()) {
-		mwm_focus_monitor(mon);
-	}
-
-	if (loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, NULL, (void**)&unviewed) < 0) {
-		return -EFAULT;
-	}
-
-	monitor_set_workspace(mon, unviewed);
+	loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, NULL, (void**)&unviewed);
+	monitor_set_workspace(monitor, unviewed);
 
 	return 0;
 }
 
-int mwm_detach_monitor(struct monitor *mon)
+int mwm_detach_monitor(const monitor_t monitor)
 {
 	struct workspace *workspace;
-	struct monitor *next_monitor;
+	monitor_t next_monitor;
 
-	next_monitor = NULL;
-
-	if (!mon) {
+	if (monitor < 0) {
 		return -EINVAL;
 	}
 
-	loop_get_next(&_mwm->monitors, mon, (void**)&next_monitor);
+	next_monitor = monitor + 1;
 
-	if (loop_remove(&_mwm->monitors, mon) < 0) {
-		return -ENODEV;
-	}
-
-	if (mwm_get_focused_monitor() == mon) {
+	if (mwm_get_focused_monitor() == monitor) {
 #if MWM_DEBUG
-		fprintf(stderr, "%s: Detaching focused monitor %p. Shifting focus to %p\n",
-		        __func__, (void*)mon, (void*)next_monitor);
+		fprintf(stderr, "%s: Detaching focused monitor %ld. Shifting focus to %ld\n",
+		        __func__, monitor, next_monitor);
 #endif /* MWM_DEBUG */
 
-		if (next_monitor == mon) {
+		/* FIXME: Need to determine if the ids refer to the same monitor */
+		if (next_monitor == monitor) {
 #if MWM_DEBUG
 			fprintf(stderr, "%s: There are no other monitors?\n", __func__);
 #endif /* MWM_DEBUG */
-			next_monitor = NULL;
+			next_monitor = -1;
 		}
 
 		mwm_focus_monitor(next_monitor);
 	}
 
-	workspace = monitor_get_workspace(mon);
-	workspace_set_viewer(workspace, NULL);
+	if (monitor_get_workspace(monitor, &workspace) == 0 && workspace) {
+		workspace_set_viewer(workspace, -1);
+	}
 
 	return 0;
 }
 
-int mwm_focus_monitor(struct monitor *monitor)
+int mwm_focus_monitor(const monitor_t monitor)
 {
-	if (!monitor) {
+	if (monitor < 0) {
 		return -EINVAL;
 	}
 
 #if MWM_DEBUG
-	fprintf(stderr, "New monitor will be: %p\n", (void*)monitor);
+	fprintf(stderr, "New monitor will be: %ld\n", monitor);
 #endif /* MWM_DEBUG */
 
 	_mwm->focus.next = monitor;
@@ -1358,7 +1294,7 @@ int mwm_focus_monitor(struct monitor *monitor)
 	return 0;
 }
 
-struct monitor* mwm_get_focused_monitor(void)
+monitor_t mwm_get_focused_monitor(void)
 {
 	return _mwm->focus.current;
 }
@@ -1366,7 +1302,7 @@ struct monitor* mwm_get_focused_monitor(void)
 int mwm_attach_client(const client_t client)
 {
 	struct workspace *workspace;
-	struct monitor *monitor;
+	monitor_t monitor;
 	Window window;
 	int err;
 
@@ -1375,7 +1311,11 @@ int mwm_attach_client(const client_t client)
 	}
 
 	monitor = mwm_get_focused_monitor();
-	workspace = monitor ? monitor_get_workspace(monitor) : NULL;
+	workspace = NULL;
+
+	if (monitor >= 0) {
+		monitor_get_workspace(monitor, &workspace);
+	}
 
 	if (!workspace) {
 		/*
@@ -1439,27 +1379,31 @@ int mwm_focus_client(const client_t client)
 
 client_t mwm_get_focused_client(void)
 {
-	struct monitor *focused_monitor;
+	client_t focused_client;
+	monitor_t focused_monitor;
+	int err;
 
-	focused_monitor = mwm_get_focused_monitor();
-
-	if (!focused_monitor) {
+	if ((focused_monitor = mwm_get_focused_monitor()) < 0) {
 		return -1;
 	}
 
-	return monitor_get_focused_client(focused_monitor);
+	if ((err = monitor_get_focused_client(focused_monitor, &focused_client)) < 0) {
+		return err;
+	}
+
+	return focused_client;
 }
 
 struct workspace *mwm_get_focused_workspace(void)
 {
-	struct monitor *monitor;
+	monitor_t monitor;
 	struct workspace *workspace;
 
 	workspace = NULL;
 	monitor = mwm_get_focused_monitor();
 
-	if (monitor) {
-		workspace = monitor_get_workspace(monitor);
+	if (monitor >= 0) {
+		monitor_get_workspace(monitor, &workspace);
 	}
 
 	return workspace;
@@ -1483,11 +1427,11 @@ int mwm_redraw(void)
 		monitor_needs_redraw(_mwm->focus.next);
 
 		_mwm->focus.current = _mwm->focus.next;
-		_mwm->focus.next = NULL;
+		_mwm->focus.next = -1;
 	}
 
 	if(_mwm->needs_redraw) {
-		loop_foreach(&_mwm->monitors, (void(*)(void*))monitor_redraw);
+		monitor_foreach((int(*)(const monitor_t, void*))monitor_redraw, NULL);
 		loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_redraw);
 	}
 
