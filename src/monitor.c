@@ -171,7 +171,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 	}
 	palette = monitor_is_focused(monitor->id) ? MWM_PALETTE_ACTIVE : MWM_PALETTE_INACTIVE;
 
-	if(focused) {
+	if (focused >= 0) {
 		struct geom focus_pos;
 		struct geom client_pos;
 		unsigned long fg_color;
@@ -190,7 +190,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		fg_color = mwm_get_color(palette, MWM_COLOR_INDICATOR_FILL);
 		bg_color = mwm_get_color(palette, MWM_COLOR_INDICATOR_BORDER);
 
-		if(indicator->orientation == HINDICATOR) {
+		if (indicator->orientation == HINDICATOR) {
 			focus_pos.x -= indicator->geom.x;
 			focus_pos.y = INDICATOR_PADDING;
 			focus_pos.h = INDICATOR_HEIGHT - 2 * INDICATOR_PADDING;
@@ -207,7 +207,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		XDrawRectangle(display, indicator->window, indicator->gfx_context,
 		               focus_pos.x, focus_pos.y, focus_pos.w, focus_pos.h);
 
-		if(indicator->orientation == HINDICATOR) {
+		if (indicator->orientation == HINDICATOR) {
 			mwm_render_text(indicator->xft_context,
 			                palette, hint,
 			                focus_pos.x + font_padding,
