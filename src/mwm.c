@@ -427,7 +427,7 @@ static void _attach_monitor(struct xrandr *xrr,
 	monitor_t monitor;
 	int err;
 
-	if ((monitor = monitor_new(crtc, geom->x, geom->y, geom->w, geom->h)) < 0) {
+	if ((monitor = monitor_new(crtc, *geom)) < 0) {
 		fprintf(stderr, "Could not create monitor for CRTC 0x%lx: %s\n", crtc, strerror(-monitor));
 		return;
 	}

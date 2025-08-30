@@ -256,7 +256,7 @@ int monitor_redraw_indicators(struct monitor *monitor)
 	return(0);
 }
 
-monitor_t monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h)
+monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom)
 {
 	struct monitor *mon;
 	int err;
@@ -270,19 +270,16 @@ monitor_t monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h)
 	}
 
 	mon->crtc = crtc;
-	mon->geom.current.x = x;
-	mon->geom.current.y = y;
-	mon->geom.current.w = w;
-	mon->geom.current.h = h;
+	memcpy(&mon->geom.current, &geom, sizeof(mon->geom.current));
 	mon->layout = layouts[0];
 
 	if ((err = set_nq(_monitors, mon)) < 0) {
 		free(mon);
 	} else {
 		mon->id = err;
-		mon->statusbar = mwm_create_window(x, y, w, STATUSBAR_HEIGHT);
+		mon->statusbar = mwm_create_window(geom.x, geom.y, geom.w, STATUSBAR_HEIGHT);
 		mon->gfx_context = mwm_create_gc();
-		mon->draw_buffer = mwm_create_pixmap(0, w, STATUSBAR_HEIGHT);
+		mon->draw_buffer = mwm_create_pixmap(0, geom.w, STATUSBAR_HEIGHT);
 		mon->xft_context = mwm_create_xft_context(mon->draw_buffer);
 		XMapRaised(mwm_get_display(), mon->statusbar);
 

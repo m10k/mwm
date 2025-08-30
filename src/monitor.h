@@ -11,7 +11,7 @@ typedef long monitor_t;
 struct layout;
 struct workspace;
 
-monitor_t monitor_new(xrandr_crtc_t crtc, int x, int y, int w, int h);
+monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom);
 int monitor_free(const monitor_t monitor_id);
 
 Display* monitor_get_display(const monitor_t monitor_id);
