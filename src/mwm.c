@@ -1235,7 +1235,7 @@ int mwm_attach_monitor(const monitor_t monitor)
 		mwm_focus_monitor(monitor);
 	}
 
-	loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, NULL, (void**)&unviewed);
+	loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, (void*)-1, (void**)&unviewed);
 	monitor_set_workspace(monitor, unviewed);
 
 	return 0;
