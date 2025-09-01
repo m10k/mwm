@@ -335,7 +335,7 @@ int workspace_shift_client(struct workspace *workspace, const client_t client, i
 		return -EINVAL;
 	}
 
-	shift = client ? client : workspace->focus.current;
+	shift = client >= 0 ? client : workspace->focus.current;
 
 	if (shift < 0) {
 		return -ENOENT;
