@@ -440,6 +440,7 @@ int monitor_set_workspace(const monitor_t monitor_id, const workspace_t workspac
 	monitor->workspace.next = workspace;
 	monitor->workspace.changed = 1;
 	monitor_needs_redraw(monitor_id);
+	workspace_needs_redraw(workspace);
 
 	return 0;
 }
