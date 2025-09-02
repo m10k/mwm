@@ -259,7 +259,7 @@ static int geom_bookshelf(const client_t client, struct geom *unallocated,
 	unallocated->x += w;
 	unallocated->w -= w;
 
-	return(client_set_geometry(client, &geom));
+	return client_set_geometry(client, &geom);
 }
 
 static int geom_bookstack(const client_t client, struct geom *unallocated,
@@ -280,15 +280,15 @@ static int geom_bookstack(const client_t client, struct geom *unallocated,
 	unallocated->y += h;
 	unallocated->h -= h;
 
-	return(client_set_geometry(client, &geom));
+	return client_set_geometry(client, &geom);
 }
 
-int _arrange_workspace(struct workspace *workspace, const client_t client,
+int _arrange_workspace(const workspace_t workspace, const client_t client,
 		       void *data)
 {
 	struct layout_args *args;
 
-	if (!workspace || client < 0 || !data) {
+	if (workspace < 0 || client < 0 || !data) {
 		return -EINVAL;
 	}
 
@@ -303,13 +303,13 @@ int _arrange_workspace(struct workspace *workspace, const client_t client,
 }
 
 int layout_arrange(struct layout *layout,
-		   struct workspace *workspace,
-		   struct geom *usable_area)
+                   const workspace_t workspace,
+                   struct geom *usable_area)
 {
 	struct layout_args args;
 
-	if(!layout || !workspace || !usable_area) {
-		return(-EINVAL);
+	if (!layout || workspace < 0 || !usable_area) {
+		return -EINVAL;
 	}
 
 	args.layout = layout;
@@ -317,12 +317,10 @@ int layout_arrange(struct layout *layout,
 	args.arranged_clients = 0;
 	memcpy(&args.usable_area, usable_area, sizeof(*usable_area));
 
-	workspace_foreach_client(workspace, _arrange_workspace, &args);
-
-	return(0);
+	return workspace_foreach_client(workspace, _arrange_workspace, &args);
 }
 
 layout_orientation_t layout_get_orientation(struct layout *layout)
 {
-	return(layout->orientation);
+	return layout->orientation;
 }

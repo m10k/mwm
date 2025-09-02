@@ -30,9 +30,6 @@
 
 typedef void (_mwm_xhandler_t)(XEvent*);
 
-#define FIND_WORKSPACE_BY_VIEWER ((int(*)(void*, void*))_cmp_workspace_viewer)
-#define FIND_WORKSPACE_BY_NUMBER ((int(*)(void*, void*))_cmp_workspace_number)
-
 static const char *_mwm_atom_names[] = {
 	[MWM_ATOM_HINT] = "MWM_HINT",
 	[MWM_ATOM_UTF8] = "UTF8_STRING",
@@ -53,8 +50,6 @@ struct mwm {
 
 	int running;
 	int needs_redraw;
-	struct loop *monitors;
-	struct loop *workspaces;
 
 	struct {
 		monitor_t current;
@@ -91,16 +86,6 @@ static int _xerror_nop(Display *display, XErrorEvent *event);
 
 static int mwm_new(struct mwm **mwm);
 static int mwm_free(struct mwm **mwm);
-
-static int _cmp_workspace_viewer(struct workspace *workspace, const monitor_t monitor)
-{
-	return workspace_get_viewer(workspace) == monitor ? 0 : 1;
-}
-
-static int _cmp_workspace_number(struct workspace *workspace, int *number)
-{
-	return(workspace_get_number(workspace) == *number ? 0 : 1);
-}
 
 static void _xev_configure_request(XEvent *event)
 {
@@ -494,11 +479,10 @@ static int mwm_new(struct mwm **dst)
 	}
 
 	for(i = 0; i < 12; i++) {
-		struct workspace *workspace;
+		workspace_t ws;
 
-		if(workspace_new(i, &workspace) < 0 ||
-		   loop_append(&mwm->workspaces, workspace) < 0) {
-			err = -ENOMEM;
+		if ((ws = workspace_new(i)) < 0) {
+			err = (int)-ws;
 			goto cleanup;
 		}
 	}
@@ -535,9 +519,6 @@ static int mwm_free(struct mwm **mwm)
 	if (!*mwm) {
 		return -EALREADY;
 	}
-
-	loop_free(&(*mwm)->workspaces);
-	loop_free(&(*mwm)->monitors);
 
 	if ((*mwm)->display) {
 		XCloseDisplay((*mwm)->display);
@@ -639,7 +620,7 @@ static void _handle_signal(int sig)
 	fprintf(stderr, "----- END monitors -----\n");
 
 	fprintf(stderr, "----- BEGIN workspaces -----\n");
-	loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_dump);
+	workspace_foreach((int(*)(const workspace_t, void*))workspace_dump, NULL);
 	fprintf(stderr, "----- END workspaces -----\n");
 }
 
@@ -678,16 +659,13 @@ static void _cmd_spawn(void *arg)
 static void _cmd_show_workspace(void *arg)
 {
 	monitor_t monitor;
-	struct workspace *workspace;
+	workspace_t workspace;
 	long number;
 
 	number = (long)arg;
 	monitor = mwm_get_focused_monitor();
 
-	if(loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
-	             (void*)&number, (void**)&workspace) < 0) {
-		return;
-	}
+	workspace = workspace_number(number);
 
 	monitor_set_workspace(monitor, workspace);
 	return;
@@ -695,11 +673,12 @@ static void _cmd_show_workspace(void *arg)
 
 static void _cmd_move_to_workspace(void *arg)
 {
-	struct workspace *src_workspace;
-	struct workspace *dst_workspace;
+	workspace_t src_workspace;
+	workspace_t dst_workspace;
 	client_t client;
 	long dst_number;
 
+	src_workspace = -1;
 	dst_number = (long)arg;
 	client = mwm_get_focused_client();
 
@@ -707,15 +686,17 @@ static void _cmd_move_to_workspace(void *arg)
 		return;
 	}
 
-	if (loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_NUMBER,
-	              (void*)&dst_number, (void**)&dst_workspace) < 0) {
+	dst_workspace = workspace_number(dst_number);
+	if (dst_workspace < 0) {
 		return;
 	}
 
-	client_get_workspace(client, &src_workspace);
+	if (client_get_workspace(client, &src_workspace) < 0) {
+		return;
+	}
 
 	if (src_workspace != dst_workspace) {
-		if (src_workspace) {
+		if (src_workspace >= 0) {
 			workspace_detach_client(src_workspace, client);
 		}
 		workspace_attach_client(dst_workspace, client);
@@ -746,26 +727,30 @@ static void _cmd_set_layout(void *arg)
 
 static void _cmd_shift_focus(void *arg)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	long dir;
 
 	dir = (long)arg;
 
 	workspace = mwm_get_focused_workspace();
-	workspace_shift_focus(workspace, dir);
+	if (workspace >= 0) {
+		workspace_shift_focus(workspace, dir);
+	}
 
 	return;
 }
 
 static void _cmd_shift_client(void *arg)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	long dir;
 
 	dir = (long)arg;
 
 	workspace = mwm_get_focused_workspace();
-	workspace_shift_client(workspace, -1, dir);
+	if (workspace >= 0) {
+		workspace_shift_client(workspace, -1, dir);
+	}
 
 	return;
 }
@@ -801,15 +786,18 @@ static void _cmd_shift_workspace(void *arg)
 {
 	monitor_t src_monitor;
 	monitor_t dst_monitor;
-	struct workspace *workspace;
+        workspace_t workspace;
 	long dir;
 
 	/* move workspace to another monitor */
 
 	dir = (long)arg;
-	workspace = NULL;
+	workspace = -1;
 
 	src_monitor = mwm_get_focused_monitor();
+	if (src_monitor < 0) {
+		return;
+	}
 	dst_monitor = src_monitor + dir;
 
 	monitor_get_workspace(src_monitor, &workspace);
@@ -1223,9 +1211,9 @@ int mwm_stop(void)
 
 int mwm_attach_monitor(const monitor_t monitor)
 {
-	struct workspace *unviewed;
+	workspace_t unviewed;
 
-	unviewed = NULL;
+	unviewed = -1;
 
 	if (monitor < 0) {
 		return -EINVAL;
@@ -1235,15 +1223,17 @@ int mwm_attach_monitor(const monitor_t monitor)
 		mwm_focus_monitor(monitor);
 	}
 
-	loop_find(&_mwm->workspaces, FIND_WORKSPACE_BY_VIEWER, (void*)-1, (void**)&unviewed);
-	monitor_set_workspace(monitor, unviewed);
+	unviewed = workspace_unviewed();
+	if (unviewed >= 0) {
+		monitor_set_workspace(monitor, unviewed);
+	}
 
 	return 0;
 }
 
 int mwm_detach_monitor(const monitor_t monitor)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	monitor_t next_monitor;
 
 	if (monitor < 0) {
@@ -1301,7 +1291,7 @@ monitor_t mwm_get_focused_monitor(void)
 
 int mwm_attach_client(const client_t client)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	monitor_t monitor;
 	Window window;
 	int err;
@@ -1311,27 +1301,24 @@ int mwm_attach_client(const client_t client)
 	}
 
 	monitor = mwm_get_focused_monitor();
-	workspace = NULL;
+	workspace = -1;
 
 	if (monitor >= 0) {
 		monitor_get_workspace(monitor, &workspace);
 	}
 
-	if (!workspace) {
+	if (workspace < 0) {
 		/*
-		 * there's a chance that we might be attaching clients
-		 * before the first monitor has been detected
+		 * There's a chance that we might be attaching clients
+		 * before the first monitor has been detected. In this
+		 * case, always attach to the first workspace.
 		 */
-
-		if (loop_get_first(&_mwm->workspaces, (void**)&workspace) < 0) {
-			/* this really shouldn't happen */
-			return -EFAULT;
-		}
+		workspace = 0;
 	}
 
 #if MWM_DEBUG
-	fprintf(stderr, "Attaching client %ld to workspace %p\n",
-		client, (void*)workspace);
+	fprintf(stderr, "Attaching client %ld to workspace %ld\n",
+		client, workspace);
 #endif /* MWM_DEBUG */
 	if ((err = client_get_window(client, &window)) < 0) {
 		return err;
@@ -1348,7 +1335,7 @@ int mwm_attach_client(const client_t client)
 
 int mwm_detach_client(const client_t client)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	int err;
 
 	if (client < 0) {
@@ -1364,13 +1351,13 @@ int mwm_detach_client(const client_t client)
 
 int mwm_focus_client(const client_t client)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 
 	if (client_get_workspace(client, &workspace) < 0) {
 		workspace = mwm_get_focused_workspace();
 	}
 
-	if(!workspace) {
+	if (workspace < 0) {
 		return -EBADFD;
 	}
 
@@ -1394,12 +1381,12 @@ client_t mwm_get_focused_client(void)
 	return focused_client;
 }
 
-struct workspace *mwm_get_focused_workspace(void)
+workspace_t mwm_get_focused_workspace(void)
 {
 	monitor_t monitor;
-	struct workspace *workspace;
+	workspace_t workspace;
 
-	workspace = NULL;
+	workspace = -ENOENT;
 	monitor = mwm_get_focused_monitor();
 
 	if (monitor >= 0) {
@@ -1407,11 +1394,6 @@ struct workspace *mwm_get_focused_workspace(void)
 	}
 
 	return workspace;
-}
-
-int mwm_foreach_workspace(int (*func)(struct workspace*, void*), void *data)
-{
-	return loop_foreach_with_data(&_mwm->workspaces, (int(*)(void*, void*))func, data);
 }
 
 int mwm_needs_redraw(void)
@@ -1432,7 +1414,7 @@ int mwm_redraw(void)
 
 	if(_mwm->needs_redraw) {
 		monitor_foreach((int(*)(const monitor_t, void*))monitor_redraw, NULL);
-		loop_foreach(&_mwm->workspaces, (void(*)(void*))workspace_redraw);
+		workspace_foreach((int(*)(const workspace_t, void*))workspace_redraw, NULL);
 	}
 
 	_mwm->needs_redraw = 0;

@@ -25,7 +25,7 @@ struct client {
 	struct geom pointer;
 	int needs_redraw;
 
-	struct workspace *workspace;
+        workspace_t workspace;
 
 	char *hint;
 };
@@ -196,7 +196,7 @@ int client_redraw(const client_t client_id)
 	return 0;
 }
 
-int client_set_workspace(const client_t client_id, struct workspace *workspace)
+int client_set_workspace(const client_t client_id, const workspace_t workspace)
 {
 	struct client *client;
 	int err;
@@ -209,7 +209,7 @@ int client_set_workspace(const client_t client_id, struct workspace *workspace)
 	return 0;
 }
 
-int client_get_workspace(const client_t client_id, struct workspace **workspace)
+int client_get_workspace(const client_t client_id, workspace_t *workspace)
 {
 	struct client *client;
 	int err;
@@ -228,13 +228,16 @@ int client_get_workspace(const client_t client_id, struct workspace **workspace)
 
 int client_is_visible(const client_t client_id)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
+	monitor_t monitor;
 
-	workspace = NULL;
+	workspace = -1;
+	monitor = -1;
 
 	return client_get_workspace(client_id, &workspace) == 0 &&
-	       workspace != NULL &&
-	       workspace_get_viewer(workspace) >= 0;
+	       workspace >= 0 &&
+	       workspace_get_viewer(workspace, &monitor) == 0 &&
+	       monitor >= 0;
 }
 
 int client_needs_redraw(const client_t client_id)
@@ -445,7 +448,7 @@ static int _client_update_mwm_hint(struct client *client, XPropertyEvent *event)
 	client->hint = hint;
 	client_needs_redraw(client->id);
 
-	if (client->workspace) {
+	if (client->workspace >= 0) {
 		workspace_needs_redraw(client->workspace);
 	}
 
@@ -463,7 +466,7 @@ int client_property_notify(const client_t client_id, XPropertyEvent *event)
 
 	switch (event->atom) {
 	case XA_WM_TRANSIENT_FOR:
-		if (client->workspace) {
+		if (client->workspace >= 0) {
 			workspace_needs_redraw(client->workspace);
 		}
 		break;
@@ -529,6 +532,26 @@ client_t client_at_xy(const int x, const int y)
 	return client_at(geom);
 }
 
+struct _client_call_args {
+	int (*func)(const client_t, void*);
+	void *data;
+};
+
+static int _client_call(struct client *client, const int idx, struct _client_call_args *args)
+{
+	return args->func((client_t)idx, args->data);
+}
+
+int client_foreach(int (*func)(const client_t, void*), void *data)
+{
+	struct _client_call_args args;
+
+	args.func = func;
+	args.data = data;
+
+	return set_foreach(_clients, (int(*)(void*, const int, void*))_client_call, &args);
+}
+
 #if MWM_DEBUG
 int client_dump(const client_t client_id)
 {
@@ -548,7 +571,7 @@ int client_dump(const client_t client_id)
 	        "      Geometry changed: %d\n"
 	        "      Pointer:          %dx%d [w/h %dx%d]\n"
 	        "      Needs redraw:     %d\n"
-	        "      Workspace:        %p\n"
+	        "      Workspace:        %ld\n"
 	        "      Hint:             %s\n",
 	        client_id, (void*)client,
 	        client->window,
@@ -557,7 +580,7 @@ int client_dump(const client_t client_id)
 	        client->geom.changed,
 	        client->pointer.x, client->pointer.y, client->pointer.w, client->pointer.h,
 	        client->needs_redraw,
-	        (void*)client->workspace,
+	        client->workspace,
 	        client->hint ? client->hint : "(none)");
 	return 0;
 }

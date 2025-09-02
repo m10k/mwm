@@ -49,8 +49,8 @@ struct monitor {
 	} geom;
 
 	struct {
-		struct workspace *current;
-		struct workspace *next;
+		workspace_t current;
+	        workspace_t next;
 		int changed;
 	} workspace;
 
@@ -145,7 +145,7 @@ void _indicator_set_visible(struct indicator *indicator, int visible, struct mon
 
 void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	client_t focused;
 	Display *display;
 	Window root;
@@ -163,11 +163,11 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		  indicator->geom.w, indicator->geom.h,
 		  0, 0);
 
-	workspace = NULL;
+	workspace = -1;
 	focused = -1;
 
-	if (monitor_get_workspace(monitor->id, &workspace) == 0 && workspace) {
-		focused = workspace_get_focused_client(workspace);
+	if (monitor_get_workspace(monitor->id, &workspace) == 0 && workspace >= 0) {
+		workspace_get_focused_client(workspace, &focused);
 	}
 	palette = monitor_is_focused(monitor->id) ? MWM_PALETTE_ACTIVE : MWM_PALETTE_INACTIVE;
 
@@ -398,7 +398,7 @@ static int monitor_swap_workspace(struct monitor *first, struct monitor *second)
 	return 0;
 }
 
-int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspace)
+int monitor_set_workspace(const monitor_t monitor_id, const workspace_t workspace)
 {
 	struct monitor *monitor;
 	struct monitor *other;
@@ -407,12 +407,13 @@ int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspac
 
 	monitor = NULL;
 	other = NULL;
+	other_id = -1;
 
 #if MWM_DEBUG
-	fprintf(stderr, "%s(%ld, %p)\n", __func__, monitor_id, (void*)workspace);
+	fprintf(stderr, "%s(%ld, %ld)\n", __func__, monitor_id, workspace);
 #endif /* MWM_DEBUG */
 
-	if (!workspace) {
+	if (workspace < 0) {
 		return -EINVAL;
 	}
 
@@ -420,15 +421,15 @@ int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspac
 		return err;
 	}
 
-	other_id = workspace_get_viewer(workspace);
+	workspace_get_viewer(workspace, &other_id);
 
 	if (__get_monitor(&other, other_id) == 0 && monitor != other) {
 		return monitor_swap_workspace(monitor, other);
 	} else {
-		struct workspace *old;
+		workspace_t old;
 
 		err = monitor_get_workspace(monitor_id, &old);
-		if (!err && old) {
+		if (!err && old >= 0) {
 			workspace_set_viewer(old, -1);
 			workspace_needs_redraw(old);
 		}
@@ -443,10 +444,14 @@ int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspac
 	return 0;
 }
 
-int monitor_get_workspace(const monitor_t monitor_id, struct workspace **workspace)
+int monitor_get_workspace(const monitor_t monitor_id, workspace_t *workspace)
 {
 	struct monitor *monitor;
 	int err;
+
+	if (!workspace) {
+		return -EINVAL;
+	}
 
 	if ((err = __get_monitor(&monitor, monitor_id)) < 0) {
 		return err;
@@ -458,8 +463,10 @@ int monitor_get_workspace(const monitor_t monitor_id, struct workspace **workspa
 
 int monitor_get_focused_client(const monitor_t monitor_id, client_t *client)
 {
-	struct workspace *workspace;
+	workspace_t workspace;
 	int err;
+
+	workspace = -1;
 
 	if (!client) {
 		return -EINVAL;
@@ -469,12 +476,11 @@ int monitor_get_focused_client(const monitor_t monitor_id, client_t *client)
 		return err;
 	}
 
-	if (!workspace) {
+	if (workspace < 0) {
 		return -ENOMEDIUM;
 	}
 
-	*client = workspace_get_focused_client(workspace);
-	return 0;
+	return workspace_get_focused_client(workspace, client);
 }
 
 int monitor_arrange_clients(const monitor_t monitor_id)
@@ -531,7 +537,7 @@ int monitor_get_usable_area(const monitor_t monitor_id, struct geom *usable_area
 	return 0;
 }
 
-static int _draw_client(struct workspace *workspace, const client_t client, void *data)
+static int _draw_client(const workspace_t workspace, const client_t client, void *data)
 {
 	client_redraw(client);
 	return(0);
@@ -539,13 +545,11 @@ static int _draw_client(struct workspace *workspace, const client_t client, void
 
 static int monitor_draw_clients(struct monitor *monitor)
 {
-	if(!monitor) {
-		return(-EINVAL);
+	if (!monitor) {
+		return -EINVAL;
 	}
 
-	workspace_foreach_client(monitor->workspace.current, _draw_client, monitor);
-
-	return(0);
+	return workspace_foreach_client(monitor->workspace.current, _draw_client, monitor);
 }
 
 int monitor_needs_redraw(const monitor_t monitor_id)
@@ -570,12 +574,13 @@ struct _draw_workspace_data {
 	int text_padding;
 	int text_width;
 	int i;
-	struct workspace *focused_workspace;
+	workspace_t focused_workspace;
 };
 
-static int _draw_workspace_button(struct workspace *workspace, void *data)
+static int _draw_workspace_button(const workspace_t workspace, void *data)
 {
 	struct _draw_workspace_data *dwdata;
+	monitor_t viewer;
 	mwm_color_t color;
 	int button_width;
 	int focused;
@@ -583,9 +588,12 @@ static int _draw_workspace_button(struct workspace *workspace, void *data)
 	int x;
 
 	dwdata = (struct _draw_workspace_data*)data;
+	viewer = -1;
+
+	workspace_get_viewer(workspace, &viewer);
 
 	focused = workspace == dwdata->focused_workspace;
-	visible = workspace_get_viewer(workspace) >= 0;
+	visible = viewer >= 0;
 
 	button_width = dwdata->text_width + 2 * dwdata->text_padding;
 	x = dwdata->i * button_width;
@@ -609,8 +617,7 @@ static int _draw_workspace_button(struct workspace *workspace, void *data)
 	                _workspace_names[dwdata->i], x + dwdata->text_padding, dwdata->text_padding,
 	                button_width, button_width);
 
-	/* A workspace necessarily has a focused client if it isn't empty */
-	if (workspace_get_focused_client(workspace) >= 0) {
+	if (workspace_count_clients(workspace) > 0) {
 		XSetForeground(dwdata->display, dwdata->monitor->gfx_context,
 		               mwm_get_color(dwdata->palette, MWM_COLOR_CLIENT_INDICATOR));
 		XFillRectangle(dwdata->display, dwdata->monitor->draw_buffer,
@@ -648,10 +655,10 @@ static int _redraw_statusbar(struct monitor *monitor)
 	dwdata.text_padding = (STATUSBAR_HEIGHT - mwm_get_font_height()) / 2;
 	dwdata.text_width = mwm_get_text_width(_workspace_names[0]);
 	dwdata.i = 0;
-	dwdata.focused_workspace = NULL;
+	dwdata.focused_workspace = -1;
 	monitor_get_workspace(monitor->id, &dwdata.focused_workspace);
 
-	mwm_foreach_workspace(_draw_workspace_button, &dwdata);
+	workspace_foreach(_draw_workspace_button, &dwdata);
 
 	workspace_button_width = dwdata.i * (dwdata.text_width + 2 * dwdata.text_padding);
 
@@ -683,7 +690,6 @@ static int _redraw_statusbar(struct monitor *monitor)
 	               monitor->gfx_context, status_x, 0,
 	               status_width, STATUSBAR_HEIGHT);
 
-	fprintf(stderr, "  rendering text %s\n", status ? status : "");
 	mwm_render_text(monitor->xft_context, dwdata.palette, status ? status : "",
 	                status_x + dwdata.text_padding, dwdata.text_padding,
 	                status_width_max, STATUSBAR_HEIGHT);

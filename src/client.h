@@ -1,12 +1,8 @@
 #ifndef MWM_CLIENT_H
 #define MWM_CLIENT_H 1
 
+#include "common.h"
 #include <X11/Xlib.h>
-
-typedef long client_t;
-
-struct workspace;
-struct geom;
 
 client_t client_new(Window window);
 int client_free(const client_t client_id);
@@ -18,8 +14,8 @@ int client_is_visible(const client_t client_id);
 int client_get_geometry(const client_t client_id, struct geom *geom);
 int client_set_geometry(const client_t client_id, struct geom *geom);
 
-int client_set_workspace(const client_t client_id, struct workspace *workspace);
-int client_get_workspace(const client_t client_id, struct workspace **workspace);
+int client_set_workspace(const client_t client_id, const workspace_t workspace);
+int client_get_workspace(const client_t client_id, workspace_t *workspace);
 
 int client_needs_redraw(const client_t client_id);
 int client_focus(const client_t client_id);
@@ -35,6 +31,8 @@ int client_get_hint(const client_t client_id, const char **hint);
 client_t client_of_window(const Window window);
 client_t client_at(const struct geom pos);
 client_t client_at_xy(const int x, const int y);
+
+int client_foreach(int (*func)(const client_t, void*), void *data);
 
 #if MWM_DEBUG
 int client_dump(const client_t client_id);

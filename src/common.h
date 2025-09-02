@@ -8,6 +8,10 @@ struct geom {
 	unsigned int h;
 };
 
+typedef long client_t;
+typedef long monitor_t;
+typedef long workspace_t;
+
 #ifndef FALSE
 #define FALSE 0
 #endif

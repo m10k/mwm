@@ -5,11 +5,8 @@
 #include <X11/Xft/Xft.h>
 #include "theme.h"
 #include "common.h"
-#include "client.h"
-#include "monitor.h"
 
 struct mwm;
-struct workspace;
 
 typedef enum {
 	MWM_CMD_QUIT = 0,
@@ -53,14 +50,10 @@ int mwm_detach_client(const client_t client);
 int mwm_focus_client(const client_t client);
 client_t mwm_get_focused_client(void);
 
-int mwm_attach_workspace(struct workspace *workspace);
-int mwm_detach_workspace(struct workspace *workspace);
-int mwm_focus_workspace(struct workspace *workspace);
-struct workspace* mwm_get_focused_workspace(void);
-int mwm_find_workspace(int (*cmp)(struct workspace*, void*),
-                       void*, struct workspace**);
-int mwm_foreach_workspace(int (*func)(struct workspace*, void*),
-                          void *data);
+int mwm_attach_workspace(const workspace_t workspace);
+int mwm_detach_workspace(const workspace_t workspace);
+int mwm_focus_workspace(const workspace_t workspace);
+workspace_t mwm_get_focused_workspace(void);
 
 Window mwm_create_window(const int x, const int y, const int w, const int h);
 GC mwm_create_gc(void);

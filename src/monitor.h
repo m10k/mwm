@@ -2,14 +2,10 @@
 #define MONITOR_H 1
 
 #include "common.h"
-#include "client.h"
 #include "xrandr.h"
 #include <X11/Xlib.h>
 
-typedef long monitor_t;
-
 struct layout;
-struct workspace;
 
 monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom);
 int monitor_free(const monitor_t monitor_id);
@@ -24,8 +20,8 @@ int monitor_get_geometry(const monitor_t monitor_id, struct geom *geom);
 int monitor_set_geometry(const monitor_t monitor_id, struct geom *geom);
 int monitor_get_usable_area(const monitor_t monitor_id, struct geom *geom);
 
-int monitor_set_workspace(const monitor_t monitor_id, struct workspace *workspace);
-int monitor_get_workspace(const monitor_t monitor_id, struct workspace **workspace);
+int monitor_set_workspace(const monitor_t monitor_id, const workspace_t workspace);
+int monitor_get_workspace(const monitor_t monitor_id, workspace_t *workspace);
 
 int monitor_get_focused_client(const monitor_t monitor_id, client_t *client);
 
