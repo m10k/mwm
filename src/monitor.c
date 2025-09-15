@@ -12,10 +12,11 @@
 #include "client.h"
 #include "layout.h"
 #include "xrandr.h"
+#include "theme.h"
 #include "set.h"
 
 #define STATUSBAR_HEIGHT 32
-#define INDICATOR_HEIGHT 64
+#define INDICATOR_HEIGHT 68
 #define INDICATOR_PADDING 16
 
 #define HINDICATOR 0
@@ -155,7 +156,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 
 	display = mwm_get_display();
 	root = mwm_get_root_window();
-	font_height = mwm_get_font_height();
+	font_height = mwm_get_font_height(MWM_FONT_INDICATOR);
 	font_padding = (INDICATOR_HEIGHT - 2 * INDICATOR_PADDING - font_height) / 2;
 
 	XCopyArea(display, root, indicator->window, indicator->gfx_context,
@@ -208,7 +209,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 		               focus_pos.x, focus_pos.y, focus_pos.w, focus_pos.h);
 
 		if (indicator->orientation == HINDICATOR) {
-			mwm_render_text(indicator->xft_context,
+			mwm_render_text(indicator->xft_context, MWM_FONT_INDICATOR,
 			                palette, hint,
 			                focus_pos.x + font_padding,
 			                focus_pos.y + font_padding,
@@ -216,6 +217,7 @@ void _redraw_indicator(struct indicator *indicator, struct monitor *monitor)
 			                focus_pos.h - (2 * font_padding));
 		} else {
 			mwm_render_text_vertical(indicator->xft_context,
+			                         MWM_FONT_INDICATOR,
 			                         palette, hint,
 			                         focus_pos.x + font_padding,
 			                         focus_pos.y + font_padding,
@@ -614,7 +616,7 @@ static int _draw_workspace_button(const workspace_t workspace, void *data)
 	               dwdata->monitor->gfx_context, x, 0,
 	               button_width, STATUSBAR_HEIGHT);
 
-	mwm_render_text(dwdata->monitor->xft_context, dwdata->palette,
+	mwm_render_text(dwdata->monitor->xft_context, MWM_FONT_STATUSBAR, dwdata->palette,
 	                _workspace_names[dwdata->i], x + dwdata->text_padding, dwdata->text_padding,
 	                button_width, button_width);
 
@@ -653,8 +655,8 @@ static int _redraw_statusbar(struct monitor *monitor)
 	dwdata.monitor = monitor;
 	dwdata.display = display;
 	dwdata.palette = focused_monitor == monitor->id ? MWM_PALETTE_ACTIVE : MWM_PALETTE_INACTIVE;
-	dwdata.text_padding = (STATUSBAR_HEIGHT - mwm_get_font_height()) / 2;
-	dwdata.text_width = mwm_get_text_width(_workspace_names[0]);
+	dwdata.text_padding = (STATUSBAR_HEIGHT - mwm_get_font_height(MWM_FONT_STATUSBAR)) / 2;
+	dwdata.text_width = mwm_get_text_width(_workspace_names[0], MWM_FONT_STATUSBAR);
 	dwdata.i = 0;
 	dwdata.focused_workspace = -1;
 	monitor_get_workspace(monitor->id, &dwdata.focused_workspace);
@@ -666,7 +668,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	mwm_get_status(&status);
 
 	/* right-align the status */
-	status_width = mwm_get_text_width(status ? status :  "") + dwdata.text_padding * 2;
+	status_width = mwm_get_text_width(status ? status :  "", MWM_FONT_STATUSBAR) + dwdata.text_padding * 2;
 	status_x = monitor->geom.current.w - status_width;
 	status_width_max = monitor->geom.current.w - workspace_button_width;
 
@@ -691,9 +693,9 @@ static int _redraw_statusbar(struct monitor *monitor)
 	               monitor->gfx_context, status_x, 0,
 	               status_width, STATUSBAR_HEIGHT);
 
-	mwm_render_text(monitor->xft_context, dwdata.palette, status ? status : "",
-	                status_x + dwdata.text_padding, dwdata.text_padding,
-	                status_width_max, STATUSBAR_HEIGHT);
+	mwm_render_text(monitor->xft_context, MWM_FONT_STATUSBAR, dwdata.palette,
+	                status ? status : "", status_x + dwdata.text_padding,
+	                dwdata.text_padding, status_width_max, STATUSBAR_HEIGHT);
 
 	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
 	          0, 0, monitor->geom.current.w, STATUSBAR_HEIGHT, 0, 0);

@@ -18,6 +18,12 @@ typedef enum {
         MWM_COLOR_MAX
 } mwm_color_t;
 
+typedef enum {
+	MWM_FONT_STATUSBAR = 0,
+	MWM_FONT_INDICATOR,
+	MWM_FONT_MAX
+} mwm_font_t;
+
 union colorset {
 	struct {
 		const char *focused;
@@ -37,6 +43,7 @@ struct theme {
 	union colorset inactive;
 
 	const char *statusbar_font;
+	const char *indicator_font;
 };
 
 #endif /* MWM_THEME_H */

@@ -69,7 +69,7 @@ struct mwm {
 		int ascent;
 		int descent;
 		int height;
-	} font;
+	} font[MWM_FONT_MAX];
 
 	struct palette palette[MWM_PALETTE_MAX];
 
@@ -961,13 +961,40 @@ static void _find_existing_clients(void)
 	return;
 }
 
-int mwm_init(void)
+static int _load_font(const mwm_font_t idx, const char *font_desc)
 {
-	extern struct theme config_theme;
 	PangoContext *context;
 	PangoFontMap *fontmap;
 	PangoFontDescription *fontdesc;
 	PangoFontMetrics *fontmetrics;
+
+	fontmap = pango_xft_get_font_map(_mwm->display, _mwm->screen);
+	fontdesc = pango_font_description_from_string(font_desc);
+
+	/* horizontal text */
+	context = pango_font_map_create_context(fontmap);
+	_mwm->font[idx].layout = pango_layout_new(context);
+	pango_layout_set_font_description(_mwm->font[idx].layout, fontdesc);
+	fontmetrics = pango_context_get_metrics(context, fontdesc, NULL);
+	g_object_unref(context);
+
+	_mwm->font[idx].ascent = pango_font_metrics_get_ascent(fontmetrics) / PANGO_SCALE;
+	_mwm->font[idx].descent = pango_font_metrics_get_descent(fontmetrics) / PANGO_SCALE;
+	_mwm->font[idx].height = _mwm->font[idx].ascent + _mwm->font[idx].descent;
+	pango_font_metrics_unref(fontmetrics);
+
+	/* vertical text */
+	context = pango_font_map_create_context(fontmap);
+	_mwm->font[idx].vlayout = pango_layout_new(context);
+	pango_layout_set_font_description(_mwm->font[idx].vlayout, fontdesc);
+	g_object_unref(context);
+
+	return 0;
+}
+
+int mwm_init(void)
+{
+	extern struct theme config_theme;
 	int err;
 	int i;
 
@@ -1044,26 +1071,8 @@ int mwm_init(void)
 
 	x_configure_notify(_mwm->display, _mwm->root, NULL, 0);
 
-	fontmap = pango_xft_get_font_map(_mwm->display, _mwm->screen);
-	fontdesc = pango_font_description_from_string(config_theme.statusbar_font);
-
-	/* set up the pango context/layout for horizontal text */
-	context = pango_font_map_create_context(fontmap);
-	_mwm->font.layout = pango_layout_new(context);
-	pango_layout_set_font_description(_mwm->font.layout, fontdesc);
-	fontmetrics = pango_context_get_metrics(context, fontdesc, NULL);
-	g_object_unref(context);
-
-	_mwm->font.ascent = pango_font_metrics_get_ascent(fontmetrics) / PANGO_SCALE;
-	_mwm->font.descent = pango_font_metrics_get_descent(fontmetrics) / PANGO_SCALE;
-	_mwm->font.height = _mwm->font.ascent + _mwm->font.descent;
-	pango_font_metrics_unref(fontmetrics);
-
-	/* set up the pango context/layout for vertical text */
-	context = pango_font_map_create_context(fontmap);
-	_mwm->font.vlayout = pango_layout_new(context);
-	pango_layout_set_font_description(_mwm->font.vlayout, fontdesc);
-	g_object_unref(context);
+	_load_font(MWM_FONT_STATUSBAR, config_theme.statusbar_font);
+	_load_font(MWM_FONT_INDICATOR, config_theme.indicator_font);
 
 	_palette_init(&(_mwm->palette[MWM_PALETTE_ACTIVE]),
 		      &config_theme.active);
@@ -1088,7 +1097,7 @@ int mwm_init(void)
 	return 0;
 }
 
-int mwm_render_text(XftDraw *drawable,
+int mwm_render_text(XftDraw *drawable, const mwm_font_t font,
                     mwm_palette_t palette, const char *text,
                     const int x, const int y,
                     const int w, const int h)
@@ -1101,22 +1110,22 @@ int mwm_render_text(XftDraw *drawable,
 
 	color = &_mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
 
-	pango_layout_set_attributes(_mwm->font.layout, NULL);
-	pango_layout_set_width(_mwm->font.layout, w * PANGO_SCALE);
-	pango_layout_set_height(_mwm->font.layout, h * PANGO_SCALE);
-	pango_layout_set_ellipsize(_mwm->font.layout, PANGO_ELLIPSIZE_END);
-	pango_layout_set_wrap(_mwm->font.layout, PANGO_WRAP_CHAR);
+	pango_layout_set_attributes(_mwm->font[font].layout, NULL);
+	pango_layout_set_width(_mwm->font[font].layout, w * PANGO_SCALE);
+	pango_layout_set_height(_mwm->font[font].layout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(_mwm->font[font].layout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(_mwm->font[font].layout, PANGO_WRAP_CHAR);
 
-	pango_layout_set_markup(_mwm->font.layout, text, -1);
+	pango_layout_set_markup(_mwm->font[font].layout, text, -1);
 	pango_xft_render_layout(drawable, color,
-				_mwm->font.layout,
+				_mwm->font[font].layout,
 				x * PANGO_SCALE,
 				y * PANGO_SCALE);
 
 	return 0;
 }
 
-int mwm_render_text_vertical(XftDraw *drawable,
+int mwm_render_text_vertical(XftDraw *drawable, const mwm_font_t font,
                              mwm_palette_t palette, const char *text,
                              const int x, const int y,
                              const int w, const int h)
@@ -1130,7 +1139,7 @@ int mwm_render_text_vertical(XftDraw *drawable,
 		return -EINVAL;
 	}
 
-	context = pango_layout_get_context(_mwm->font.vlayout);
+	context = pango_layout_get_context(_mwm->font[font].vlayout);
 	color = &_mwm->palette[palette].xcolor[MWM_COLOR_TEXT];
 
 	pango_matrix_translate(&matrix, x, y);
@@ -1138,15 +1147,15 @@ int mwm_render_text_vertical(XftDraw *drawable,
 	pango_context_set_matrix(context, &matrix);
 	pango_context_set_base_gravity(context, PANGO_GRAVITY_EAST);
 
-	pango_layout_set_attributes(_mwm->font.vlayout, NULL);
-	pango_layout_set_width(_mwm->font.vlayout, w * PANGO_SCALE);
-	pango_layout_set_height(_mwm->font.vlayout, h * PANGO_SCALE);
-	pango_layout_set_ellipsize(_mwm->font.vlayout, PANGO_ELLIPSIZE_END);
-	pango_layout_set_wrap(_mwm->font.vlayout, PANGO_WRAP_CHAR);
-	pango_layout_set_markup(_mwm->font.vlayout, text, -1);
-	pango_layout_get_extents(_mwm->font.vlayout, NULL, &extents);
+	pango_layout_set_attributes(_mwm->font[font].vlayout, NULL);
+	pango_layout_set_width(_mwm->font[font].vlayout, w * PANGO_SCALE);
+	pango_layout_set_height(_mwm->font[font].vlayout, h * PANGO_SCALE);
+	pango_layout_set_ellipsize(_mwm->font[font].vlayout, PANGO_ELLIPSIZE_END);
+	pango_layout_set_wrap(_mwm->font[font].vlayout, PANGO_WRAP_CHAR);
+	pango_layout_set_markup(_mwm->font[font].vlayout, text, -1);
+	pango_layout_get_extents(_mwm->font[font].vlayout, NULL, &extents);
 
-	pango_xft_render_layout(drawable, color, _mwm->font.vlayout,
+	pango_xft_render_layout(drawable, color, _mwm->font[font].vlayout,
 				0, -1.0 * extents.height);
 
 	return 0;
@@ -1472,20 +1481,20 @@ void mwm_free_pixmap(Drawable drawable)
 	return;
 }
 
-int mwm_get_font_height(void)
+int mwm_get_font_height(const mwm_font_t font)
 {
-	return _mwm->font.height;
+	return _mwm->font[font].height;
 }
 
-int mwm_get_text_width(const char *text)
+int mwm_get_text_width(const char *text, const mwm_font_t font)
 {
 	PangoRectangle extents;
 
-	pango_layout_set_attributes(_mwm->font.layout, NULL);
-	pango_layout_set_width(_mwm->font.layout, -1);
-	pango_layout_set_height(_mwm->font.layout, -1);
-	pango_layout_set_markup(_mwm->font.layout, text, -1);
-	pango_layout_get_extents(_mwm->font.layout, 0, &extents);
+	pango_layout_set_attributes(_mwm->font[font].layout, NULL);
+	pango_layout_set_width(_mwm->font[font].layout, -1);
+	pango_layout_set_height(_mwm->font[font].layout, -1);
+	pango_layout_set_markup(_mwm->font[font].layout, text, -1);
+	pango_layout_get_extents(_mwm->font[font].layout, 0, &extents);
 
 	return extents.width / PANGO_SCALE;
 }

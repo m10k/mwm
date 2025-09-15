@@ -38,7 +38,8 @@ struct theme config_theme = {
 		}
 	},
 
-	.statusbar_font = "青柳衡山フォントT 14"
+	.statusbar_font = "青柳衡山フォントT 14",
+	.indicator_font = "青柳衡山フォントT 14"
 };
 
 struct key_binding config_keybindings[] = {

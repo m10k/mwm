@@ -60,16 +60,16 @@ GC mwm_create_gc(void);
 XftDraw* mwm_create_xft_context(Drawable drawable);
 Drawable mwm_create_pixmap(Window window, const int width, const int height);
 void mwm_free_pixmap(Drawable drawable);
-int mwm_render_text(XftDraw *drawable,
+int mwm_render_text(XftDraw *drawable, const mwm_font_t font,
                     mwm_palette_t palette, const char *text,
                     const int x, const int y,
                     const int w, const int h);
-int mwm_render_text_vertical(XftDraw *drawable,
+int mwm_render_text_vertical(XftDraw *drawable, const mwm_font_t font,
                              mwm_palette_t palette, const char *text,
                              const int x, const int y,
                              const int w, const int h);
-int mwm_get_font_height(void);
-int mwm_get_text_width(const char *text);
+int mwm_get_font_height(const mwm_font_t font);
+int mwm_get_text_width(const char *text, const mwm_font_t font);
 int mwm_get_text_property(Window window, Atom atom, char **dst);
 unsigned long mwm_get_color(mwm_palette_t palette, mwm_color_t color);
 
