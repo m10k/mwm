@@ -265,6 +265,7 @@ monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom)
 	mon->crtc = crtc;
 	memcpy(&mon->geom, &geom, sizeof(mon->geom));
 	mon->layout = layouts[0];
+	mon->workspace = -1;
 
 	if ((err = set_nq(_monitors, mon)) < 0) {
 		free(mon);
