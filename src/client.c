@@ -69,6 +69,7 @@ client_t client_new(Window window)
 	client->pointer.y = -1;
 	client->pointer.w = 1;
 	client->pointer.h = 1;
+	client->workspace = -1;
 
 	if ((err = set_nq(_clients, client)) < 0) {
 		free(client);
