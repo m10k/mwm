@@ -1,6 +1,6 @@
 OUTPUT = mwm
 OBJECTS = main.o x.o monitor.o mwm.o workspace.o loop.o client.o common.o layout.o \
-          config.o kbptr.o xrandr.o set.o
+          config.o kbptr.o xrandr.o set.o event.o
 
 ifeq ($(PREFIX), )
 	PREFIX = /usr

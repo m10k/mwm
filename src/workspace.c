@@ -588,6 +588,7 @@ int workspace_shift_client(const workspace_t workspace_id, const client_t client
 	} else {
 		shift_src = workspace->focus.current;
 	}
+	fprintf(stderr, "%s: Shifting client #%d (id %ld)\n", __func__, shift_src, workspace->clients[shift_src]);
 
 	if (shift_src < 0) {
 		return shift_src;
@@ -597,10 +598,23 @@ int workspace_shift_client(const workspace_t workspace_id, const client_t client
 		shift_dst += workspace->num_clients;
 	}
 
+	fprintf(stderr, "%s: Swapping clients #%d and #%d (id %ld and %ld)\n",
+	        __func__, shift_src, shift_dst, workspace->clients[shift_src], workspace->clients[shift_dst]);
+
 	swap = workspace->clients[shift_dst];
 	workspace->clients[shift_dst] = workspace->clients[shift_src];
 	workspace->clients[shift_src] = swap;
+	if (shift_src == workspace->focus.current) {
+		workspace->focus.current = shift_dst;
+		fprintf(stderr, "%s: Updating workspace->focus.current to %d\n", __func__, shift_dst);
+	}
 	workspace_needs_redraw(workspace_id);
+
+	fprintf(stderr, "%s: workspace->focus\n"
+	        "  .current = %d\n"
+	        "  .next    = %d\n"
+	        "  .changed = %d\n",
+	        __func__, workspace->focus.current, workspace->focus.next, workspace->focus.changed);
 
 	return 0;
 }

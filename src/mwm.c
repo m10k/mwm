@@ -17,6 +17,7 @@
 #include <pango/pango.h>
 #include <pango/pangoxft.h>
 #include "mwm.h"
+#include "event.h"
 #include "keys.h"
 #include "workspace.h"
 #include "monitor.h"
@@ -29,6 +30,8 @@
 #include "xrandr.h"
 
 typedef void (_mwm_xhandler_t)(XEvent*);
+typedef int (event_conv_t)(XEvent*, struct event*);
+typedef int (event_handler_t)(struct event*);
 
 static const char *_mwm_atom_names[] = {
 	[MWM_ATOM_HINT] = "MWM_HINT",
@@ -1161,6 +1164,428 @@ int mwm_render_text_vertical(XftDraw *drawable, const mwm_font_t font,
 	return 0;
 }
 
+static int _xevent_to_configure_request(XConfigureRequestEvent *xevent, struct event *event)
+{
+	event->data.configure_request.window     = xevent->window;
+	event->data.configure_request.geom.x     = xevent->x;
+	event->data.configure_request.geom.y     = xevent->y;
+	event->data.configure_request.geom.w     = xevent->width;
+	event->data.configure_request.geom.h     = xevent->height;
+	event->data.configure_request.above      = xevent->above;
+	event->data.configure_request.detail     = xevent->detail;
+	event->data.configure_request.value_mask = xevent->value_mask;
+	event->data.configure_request.client     = client_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_configure_notify(XConfigureEvent *xevent, struct event *event)
+{
+	event->data.configure_notify.window = xevent->window;
+	event->data.configure_notify.geom.x = xevent->x;
+	event->data.configure_notify.geom.y = xevent->y;
+	event->data.configure_notify.geom.w = xevent->width;
+	event->data.configure_notify.geom.h = xevent->height;
+
+	return 0;
+}
+
+static int _xevent_to_destroy_notify(XDestroyWindowEvent *xevent, struct event *event)
+{
+	client_t client;
+	int err;
+
+	client = client_of_window(xevent->window);
+
+	if (client < 0) {
+		fprintf(stderr, "%s: Could not find client of window 0x%lx\n",
+		        __func__, xevent->window);
+		err = -EFAULT;
+	} else {
+		event->data.destroy_notify.client = client;
+		err = 0;
+	}
+
+	return err;
+}
+
+static int _xevent_to_enter_notify(XCrossingEvent *xevent, struct event *event)
+{
+	event->data.enter_notify.window  = xevent->window;
+	event->data.enter_notify.mode    = xevent->mode;
+	event->data.enter_notify.detail  = xevent->detail;
+	event->data.enter_notify.client  = client_of_window(xevent->window);
+	event->data.enter_notify.monitor = monitor_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_expose(XExposeEvent *xevent, struct event *event)
+{
+	event->data.expose.count   = xevent->count;
+	event->data.expose.window  = xevent->window;
+	event->data.expose.monitor = monitor_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_focus_in(XFocusInEvent *xevent, struct event *event)
+{
+	event->data.focus_in.window = xevent->window;
+	event->data.focus_in.client = client_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_key_press(XKeyEvent *xevent, struct event *event)
+{
+	event->data.key_press.keysym = XkbKeycodeToKeysym(_mwm->display, xevent->keycode, 0, 0);
+	event->data.key_press.mask   = xevent->state;
+
+	return 0;
+}
+
+static int _xevent_to_mapping_notify(XMappingEvent *xevent, struct event *event)
+{
+	memcpy(&event->data.mapping_notify.xevent,
+	       xevent,
+	       sizeof(event->data.mapping_notify.xevent));
+
+	return 0;
+}
+
+static int _xevent_to_map_request(XMapRequestEvent *xevent, struct event *event)
+{
+	event->data.map_request.window = xevent->window;
+	event->data.map_request.client = client_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_motion_notify(XMotionEvent *xevent, struct event *event)
+{
+	/* TODO: Remove this in the future */
+	event->data.motion_notify.pointer.x = xevent->x_root;
+	event->data.motion_notify.pointer.y = xevent->y_root;
+	event->data.motion_notify.pointer.w = 1;
+	event->data.motion_notify.pointer.h = 1;
+
+	event->data.motion_notify.client = client_of_window(xevent->window);
+	event->data.motion_notify.monitor = monitor_of_window(xevent->window);
+
+	return 0;
+}
+
+static int _xevent_to_property_notify(XPropertyEvent *xevent, struct event *event)
+{
+	event->data.property_notify.window = xevent->window;
+	event->data.property_notify.client = client_of_window(xevent->window);
+	memcpy(&event->data.property_notify.xevent,
+	       xevent,
+	       sizeof(event->data.property_notify.xevent));
+
+	return 0;
+}
+
+static int _xevent_to_unmap_notify(XUnmapEvent *xevent, struct event *event)
+{
+	client_t client;
+	int err;
+
+	if ((client = client_of_window(xevent->window))) {
+		/* No client associated with this window. This is probably fine. */
+		err = -ENOENT;
+	} else {
+		event->data.unmap_notify.client = client;
+		err = 0;
+	}
+
+	return err;
+}
+
+static int _event_configure_request_handler(struct event *event)
+{
+	if (event->data.configure_request.client < 0) {
+		XWindowChanges changes;
+		unsigned int value_mask;
+
+		changes.x = event->data.configure_request.geom.x;
+		changes.y = event->data.configure_request.geom.y;
+		changes.width = event->data.configure_request.geom.w;
+		changes.height = event->data.configure_request.geom.h;
+		changes.border_width = 0;
+		changes.sibling = event->data.configure_request.above;
+		changes.stack_mode = event->data.configure_request.detail;
+		value_mask = event->data.configure_request.value_mask | CWBorderWidth;
+
+		XConfigureWindow(_mwm->display, event->data.configure_request.window,
+		                 value_mask, &changes);
+	} else {
+		client_set_state(event->data.configure_request.client, NormalState);
+	}
+
+	XSync(_mwm->display, False);
+
+	return 0;
+}
+
+static int _event_configure_notify_handler(struct event *event)
+{
+	if (event->data.configure_notify.window == _mwm->root &&
+	    x_get_geom(_mwm->display, _mwm->root, &_mwm->root_geom) < 0) {
+		mwm_stop();
+	}
+
+	return 0;
+}
+
+static int _event_destroy_notify_handler(struct event *event)
+{
+	client_t client;
+	int err;
+
+	client = event->data.destroy_notify.client;
+
+	if (client >= 0) {
+		if ((err = mwm_detach_client(client)) < 0) {
+			fprintf(stderr, "%s: Could not detach client %ld\n", __func__, client);
+			return err;
+		}
+
+		client_free(client);
+	}
+
+	return 0;
+}
+
+static int _event_enter_notify_handler(struct event *event)
+{
+	if ((event->data.enter_notify.mode != NotifyNormal ||
+	     event->data.enter_notify.detail == NotifyInferior) &&
+	    event->data.enter_notify.window == _mwm->root) {
+		return 0;
+	}
+
+	if (event->data.enter_notify.client >= 0) {
+		mwm_focus_client(event->data.enter_notify.client);
+	}
+	if (event->data.enter_notify.monitor >= 0) {
+		mwm_focus_monitor(event->data.enter_notify.monitor);
+	}
+
+	return 0;
+}
+
+static int _event_expose_handler(struct event *event)
+{
+	if (event->data.expose.count == 0 &&
+	    event->data.expose.monitor >= 0) {
+		monitor_needs_redraw(event->data.expose.monitor);
+	}
+
+	return 0;
+}
+
+static int _event_focus_in_handler(struct event *event)
+{
+	if (event->data.focus_in.client >= 0) {
+		mwm_focus_client(event->data.focus_in.window);
+	}
+
+	return 0;
+}
+
+static int _event_key_press_handler(struct event *event)
+{
+	extern struct key_binding config_keybindings[];
+	struct key_binding *binding;
+	KeySym keysym;
+	unsigned int mask;
+
+#define BUTTONMASK      (ButtonPressMask | ButtonReleaseMask)
+#define ALLMODMASK      (Mod1Mask | Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask)
+#define ALLMASK         (ShiftMask | ControlMask | ALLMODMASK)
+#define CLEANMASK(mask) ((mask) & ~LockMask & ALLMASK)
+
+	keysym = event->data.key_press.keysym;
+	mask = CLEANMASK(event->data.key_press.mask);
+
+	for (binding = config_keybindings; binding->cmd < MWM_CMD_MAX; binding++) {
+		if (keysym == binding->key &&
+		    mask == CLEANMASK(binding->mod)) {
+			mwm_cmd(binding->cmd, binding->arg);
+		}
+	}
+
+#undef BUTTONMASK
+#undef ALLMODMASK
+#undef ALLMASK
+#undef CLEANMASK
+
+	return 0;
+}
+
+static int _event_mapping_notify_handler(struct event *event)
+{
+	XRefreshKeyboardMapping(&event->data.mapping_notify.xevent);
+
+	if (event->data.mapping_notify.xevent.request == MappingKeyboard) {
+		mwm_grab_keys();
+	}
+
+	return 0;
+}
+
+static int _event_map_request_handler(struct event *event)
+{
+	XWindowAttributes attrs;
+
+	if (!XGetWindowAttributes(_mwm->display,
+	                          event->data.map_request.window,
+	                          &attrs)) {
+		return 0;
+	}
+
+	if (attrs.override_redirect) {
+		return 0;
+	}
+
+	if (event->data.map_request.client < 0) {
+		client_t client;
+		int err;
+
+		if ((client = client_new(event->data.map_request.window)) < 0) {
+			return (int)client;
+		}
+
+		if ((err = mwm_attach_client(client)) < 0) {
+			client_free(client);
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+static int _event_motion_notify_handler(struct event *event)
+{
+	monitor_t monitor;
+
+	/* TODO: Don't handle this event in the future */
+
+	monitor = event->data.motion_notify.monitor;
+
+	if (monitor >= 0 && mwm_get_focused_monitor() != monitor) {
+		mwm_focus_monitor(monitor);
+	}
+
+	return 0;
+}
+
+static int _event_property_notify_handler(struct event *event)
+{
+	if (event->data.property_notify.window == _mwm->root) {
+		mwm_needs_redraw();
+	} else if (event->data.property_notify.client >= 0) {
+		client_property_notify(event->data.property_notify.client,
+		                       &event->data.property_notify.xevent);
+	}
+
+	return 0;
+}
+
+static int _event_unmap_notify_handler(struct event *event)
+{
+	client_t client;
+
+	if ((client = event->data.unmap_notify.client) < 0) {
+		return 0;
+	}
+
+	XGrabServer(_mwm->display);
+	XSync(_mwm->display, False);
+	XSetErrorHandler(_xerror_nop);
+
+	client_set_state(client, WithdrawnState);
+
+	if (!event->data.unmap_notify.send_event) {
+		mwm_detach_client(client);
+		client_free(client);
+	}
+
+	XSync(_mwm->display, False);
+	XSetErrorHandler(_xerror_handle);
+	XUngrabServer(_mwm->display);
+
+	return 0;
+}
+
+static const struct {
+	event_type_t type;
+	event_conv_t *converter;
+} _event_converters[] = {
+	[ConfigureRequest] = { EVENT_CONFIGURE_REQUEST, (event_conv_t*)_xevent_to_configure_request },
+	[ConfigureNotify]  = { EVENT_CONFIGURE_NOTIFY,  (event_conv_t*)_xevent_to_configure_notify  },
+	[DestroyNotify]    = { EVENT_DESTROY_NOTIFY,    (event_conv_t*)_xevent_to_destroy_notify    },
+	[EnterNotify]      = { EVENT_ENTER_NOTIFY,      (event_conv_t*)_xevent_to_enter_notify      },
+	[Expose]           = { EVENT_EXPOSE,            (event_conv_t*)_xevent_to_expose            },
+	[FocusIn]          = { EVENT_FOCUS_IN,          (event_conv_t*)_xevent_to_focus_in          },
+	[KeyPress]         = { EVENT_KEY_PRESS,         (event_conv_t*)_xevent_to_key_press         },
+	[MappingNotify]    = { EVENT_MAPPING_NOTIFY,    (event_conv_t*)_xevent_to_mapping_notify    },
+	[MapRequest]       = { EVENT_MAP_REQUEST,       (event_conv_t*)_xevent_to_map_request       },
+	[MotionNotify]     = { EVENT_MOTION_NOTIFY,     (event_conv_t*)_xevent_to_motion_notify     },
+	[PropertyNotify]   = { EVENT_PROPERTY_NOTIFY,   (event_conv_t*)_xevent_to_property_notify   },
+	[UnmapNotify]      = { EVENT_UNMAP_NOTIFY,      (event_conv_t*)_xevent_to_unmap_notify      },
+};
+
+static event_handler_t * const _event_handlers[] = {
+	[EVENT_CONFIGURE_REQUEST] = _event_configure_request_handler,
+	[EVENT_CONFIGURE_NOTIFY]  = _event_configure_notify_handler,
+	[EVENT_DESTROY_NOTIFY]    = _event_destroy_notify_handler,
+	[EVENT_ENTER_NOTIFY]      = _event_enter_notify_handler,
+	[EVENT_EXPOSE]            = _event_expose_handler,
+	[EVENT_FOCUS_IN]          = _event_focus_in_handler,
+	[EVENT_KEY_PRESS]         = _event_key_press_handler,
+	[EVENT_MAPPING_NOTIFY]    = _event_mapping_notify_handler,
+	[EVENT_MAP_REQUEST]       = _event_map_request_handler,
+	[EVENT_MOTION_NOTIFY]     = _event_motion_notify_handler,
+	[EVENT_PROPERTY_NOTIFY]   = _event_property_notify_handler,
+	[EVENT_UNMAP_NOTIFY]      = _event_unmap_notify_handler,
+};
+
+int xevent_to_event(XEvent *xevent, struct event **dst)
+{
+	int err;
+	event_type_t type;
+	struct event *event;
+
+	event = NULL;
+
+	if (xevent->type < (sizeof(_event_converters) / sizeof(_event_converters[0]))) {
+		if (_event_converters[xevent->type].converter) {
+			type = _event_converters[xevent->type].type;
+
+			err = event_new(&event, type);
+
+			if (!err) {
+				err = _event_converters[xevent->type].converter(xevent, event);
+			}
+		} else {
+			err = -ENOSYS;
+		}
+	} else {
+		err = xrandr_event_to_event(_mwm->xrandr, xevent, &event);
+	}
+
+	if (!err) {
+		*dst = event;
+	} else if (event) {
+		event_free(&event);
+	}
+
+	return err;
+}
+
 int mwm_run(void)
 {
 	XEvent event;
@@ -1170,6 +1595,7 @@ int mwm_run(void)
 
 	while (_mwm->running) {
 		client_t focused_client;
+		struct event *mwm_event;
 
 		/*
 		 * Handle as many events as possible before redrawing. This is necessary
@@ -1181,16 +1607,38 @@ int mwm_run(void)
 		 */
 
 		do {
-			if (XNextEvent(_mwm->display, &event) == 0) {
-				if (event.type < (sizeof(_mwm->xhandler) / sizeof(_mwm->xhandler[0]))) {
-					if (_mwm->xhandler[event.type]) {
-						_mwm->xhandler[event.type](&event);
-					}
-				} else {
-					xrandr_handle_event(_mwm->xrandr, &event);
+			int err;
+
+			if (XNextEvent(_mwm->display, &event) != 0) {
+				continue;
+			}
+
+			if ((err = xevent_to_event(&event, &mwm_event)) < 0) {
+				if (err != -ENOSYS) {
+					fprintf(stderr, "Could not convert event: %s\n", strerror(-err));
 				}
+
+				continue;
+			}
+
+			if ((err = event_nq(mwm_event)) < 0) {
+				fprintf(stderr, "Could not enqueue event: %s\n", strerror(-err));
+				event_free(&mwm_event);
+				continue;
 			}
 		} while (XEventsQueued(_mwm->display, QueuedAfterFlush) > 0);
+
+		while (event_dq(&mwm_event) >= 0) {
+			fprintf(stderr, "Handling event %d\n", mwm_event->type);
+
+			if (mwm_event->type < (sizeof(_event_handlers) / sizeof(_event_handlers[0]))) {
+				_event_handlers[mwm_event->type](mwm_event);
+			} else {
+				xrandr_handle_mevent(_mwm->xrandr, mwm_event);
+			}
+
+			event_free(&mwm_event);
+		}
 
 		if (_mwm->needs_redraw) {
 			mwm_redraw();

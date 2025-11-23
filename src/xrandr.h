@@ -15,6 +15,7 @@ typedef enum {
 } xrandr_event_t;
 
 struct xrandr;
+struct event;
 
 typedef void (xrandr_func_t)(struct xrandr*,
                              xrandr_crtc_t,
@@ -25,11 +26,15 @@ int xrandr_new(struct xrandr **xrr, Display *display, Window window);
 int xrandr_free(struct xrandr **xrr);
 
 void xrandr_handle_event(struct xrandr *xrr, XEvent *event);
+void xrandr_handle_mevent(struct xrandr *xrr, struct event *event);
+
 void xrandr_update(struct xrandr *xrr);
 
 int xrandr_set_callback(struct xrandr *xrr,
                         xrandr_event_t event,
                         xrandr_func_t *handler,
                         void *userdata);
+
+int xrandr_event_to_event(struct xrandr *xrr, XEvent *xevent, struct event **event);
 
 #endif /* MWM_XRANDR_H */

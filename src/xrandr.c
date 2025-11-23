@@ -6,6 +6,7 @@
 #include "xrandr.h"
 #include "loop.h"
 #include "common.h"
+#include "event.h"
 
 #define FIND_OUTPUT_BY_ID ((int(*)(void*, void*))_cmp_output_id)
 #define FIND_CRTC_BY_ID   ((int(*)(void*, void*))_cmp_crtc_id)
@@ -295,6 +296,20 @@ static void _update_associations(struct xrandr *xrr)
 	return;
 }
 
+static void _handle_output_change_mevent(struct xrandr *xrr,
+                                         struct event *event)
+{
+	fprintf(stderr, "%s()\n", __func__);
+
+	if (!event->data.output_change.output) {
+		return;
+	}
+
+	_update_output(xrr, event->data.output_change.output,
+	               event->data.output_change.crtc,
+	               event->data.output_change.connection == RR_Connected);
+}
+
 static void _handle_output_change_event(struct xrandr *xrr,
                                         XRROutputChangeNotifyEvent *event)
 {
@@ -310,6 +325,32 @@ static void _handle_output_change_event(struct xrandr *xrr,
 	_update_output(xrr, event->output, event->crtc,
 	               event->connection == RR_Connected);
 	return;
+}
+
+static void _handle_crtc_change_mevent(struct xrandr *xrr, struct event *event)
+{
+	struct geom geom;
+
+	fprintf(stderr, "%s: crtc=%lx, %dx%d @%d,%d, mode=%x\n",
+	        __func__, event->data.crtc_change.crtc, event->data.crtc_change.geom.w, event->data.crtc_change.geom.h,
+	        event->data.crtc_change.geom.x, event->data.crtc_change.geom.y, event->data.crtc_change.mode);
+
+	if (!event->data.crtc_change.crtc) {
+		return;
+	}
+
+	geom = event->data.crtc_change.geom;
+
+	if (event->data.crtc_change.rotation == RR_Rotate_90 ||
+	    event->data.crtc_change.rotation == RR_Rotate_270) {
+		int swap;
+
+		swap = geom.w;
+		geom.w = geom.h;
+		geom.h = swap;
+	}
+
+	_update_crtc(xrr, event->data.crtc_change.crtc, &geom);
 }
 
 static void _handle_crtc_change_event(struct xrandr *xrr, XRRCrtcChangeNotifyEvent *event)
@@ -342,6 +383,106 @@ static void _handle_crtc_change_event(struct xrandr *xrr, XRRCrtcChangeNotifyEve
 
 	_update_crtc(xrr, event->crtc, &geom);
 	return;
+}
+
+int xrandr_event_to_event(struct xrandr *xrr, XEvent *xevent, struct event **dst)
+{
+	struct event *event;
+	int err;
+
+	err = -EPROTONOSUPPORT;
+
+	switch (xevent->type - xrr->event_base) {
+	case RRScreenChangeNotify:
+		/* this is currently not used, so not implemented */
+		err = -ENOSYS;
+		break;
+
+	case RRNotify:
+		switch (((XRRNotifyEvent*)xevent)->subtype) {
+		case RRNotify_CrtcChange: {
+			XRRCrtcChangeNotifyEvent *xrrevent;
+
+			xrrevent = (XRRCrtcChangeNotifyEvent*)xevent;
+
+			fprintf(stderr, "* XRRCrtcChangeNotifyEvent\n");
+
+			if ((err = event_new(&event, EVENT_CRTC_CHANGE)) < 0) {
+				break;
+			}
+
+			event->data.crtc_change.crtc     = xrrevent->crtc;
+			event->data.crtc_change.geom.x   = xrrevent->x;
+			event->data.crtc_change.geom.y   = xrrevent->y;
+			event->data.crtc_change.geom.w   = xrrevent->width;
+			event->data.crtc_change.geom.h   = xrrevent->height;
+			event->data.crtc_change.mode     = xrrevent->mode;
+			event->data.crtc_change.rotation = xrrevent->rotation;
+
+			err = 0;
+			break;
+		}
+
+		case RRNotify_OutputChange: {
+			XRROutputChangeNotifyEvent *xrrevent;
+
+			xrrevent = (XRROutputChangeNotifyEvent*)xevent;
+
+			fprintf(stderr, "* XRROutputChangeNotifyEvent\n");
+
+			if ((err = event_new(&event, EVENT_OUTPUT_CHANGE)) < 0) {
+				break;
+			}
+
+			event->data.output_change.crtc       = xrrevent->crtc;
+			event->data.output_change.output     = xrrevent->output;
+			event->data.output_change.connection = xrrevent->connection;
+
+			err = 0;
+			break;
+		}
+
+		case RRNotify_OutputProperty:
+		case RRNotify_ProviderChange:
+		case RRNotify_ProviderProperty:
+		case RRNotify_ResourceChange:
+		case RRNotify_Lease:
+			/* these are currently not used, so not implemented */
+			err = -ENOSYS;
+			break;
+		}
+		break;
+
+	default:
+		/* not an XRandR event */
+		break;
+	}
+
+	if (!err) {
+		*dst = event;
+	}
+
+	return err;
+}
+
+void xrandr_handle_mevent(struct xrandr *xrr, struct event *event)
+{
+	fprintf(stderr, "%s(%p, %p)\n", __func__, (void*)xrr, (void*)event);
+
+	switch (event->type) {
+	case EVENT_CRTC_CHANGE:
+		_handle_crtc_change_mevent(xrr, event);
+		break;
+
+	case EVENT_OUTPUT_CHANGE:
+		_handle_output_change_mevent(xrr, event);
+		break;
+
+	default:
+		fprintf(stderr, "%s: Not handling non-XRandR event type 0x%x\n",
+		        __func__, event->type);
+		break;
+	}
 }
 
 void xrandr_handle_event(struct xrandr *xrr, XEvent *event)
@@ -384,6 +525,8 @@ void xrandr_update(struct xrandr *xrr)
 {
 	XRRScreenResources *resources;
 	int i;
+
+	fprintf(stderr, "* Discovering XRandR configuration\n");
 
 	if (!(resources = XRRGetScreenResources(xrr->display, xrr->window))) {
 		return;
@@ -457,6 +600,7 @@ void xrandr_update(struct xrandr *xrr)
 	}
 
 	XRRFreeScreenResources(resources);
+	fprintf(stderr, "* Done\n");
 
 	return;
 }
