@@ -43,17 +43,8 @@ struct monitor {
 
 	int needs_redraw;
 
-	struct {
-		struct geom current;
-		struct geom next;
-		int changed;
-	} geom;
-
-	struct {
-		workspace_t current;
-	        workspace_t next;
-		int changed;
-	} workspace;
+	struct geom geom;
+	workspace_t workspace;
 
 	struct layout *layout;
 };
@@ -110,18 +101,18 @@ static void _indicator_update_window(struct indicator *indicator, struct monitor
 static void _indicator_update_geometry(struct monitor *monitor)
 {
 	monitor->indicator[HINDICATOR].orientation = HINDICATOR;
-	monitor->indicator[HINDICATOR].geom.x = monitor->geom.current.x;
-	monitor->indicator[HINDICATOR].geom.y = monitor->geom.current.y + STATUSBAR_HEIGHT;
-	monitor->indicator[HINDICATOR].geom.w = monitor->geom.current.w;
+	monitor->indicator[HINDICATOR].geom.x = monitor->geom.x;
+	monitor->indicator[HINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
+	monitor->indicator[HINDICATOR].geom.w = monitor->geom.w;
 	monitor->indicator[HINDICATOR].geom.h = INDICATOR_HEIGHT;
 	_indicator_update_window(&monitor->indicator[HINDICATOR], monitor);
 
 	monitor->indicator[VINDICATOR].orientation = VINDICATOR;
-	monitor->indicator[VINDICATOR].geom.x = monitor->geom.current.x + monitor->geom.current.w -
+	monitor->indicator[VINDICATOR].geom.x = monitor->geom.x + monitor->geom.w -
 		INDICATOR_HEIGHT;
-	monitor->indicator[VINDICATOR].geom.y = monitor->geom.current.y + STATUSBAR_HEIGHT;
+	monitor->indicator[VINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
 	monitor->indicator[VINDICATOR].geom.w = INDICATOR_HEIGHT;
-	monitor->indicator[VINDICATOR].geom.h = monitor->geom.current.h - STATUSBAR_HEIGHT;
+	monitor->indicator[VINDICATOR].geom.h = monitor->geom.h - STATUSBAR_HEIGHT;
 	_indicator_update_window(&monitor->indicator[VINDICATOR], monitor);
 
 	return;
@@ -272,7 +263,7 @@ monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom)
 	}
 
 	mon->crtc = crtc;
-	memcpy(&mon->geom.current, &geom, sizeof(mon->geom.current));
+	memcpy(&mon->geom, &geom, sizeof(mon->geom));
 	mon->layout = layouts[0];
 
 	if ((err = set_nq(_monitors, mon)) < 0) {
@@ -351,7 +342,7 @@ int monitor_get_geometry(const monitor_t monitor_id, struct geom *geom)
 		return err;
 	}
 
-	memcpy(geom, &monitor->geom.current, sizeof(*geom));
+	memcpy(geom, &monitor->geom, sizeof(*geom));
 	return 0;
 }
 
@@ -368,7 +359,7 @@ int monitor_set_geometry(const monitor_t monitor_id, struct geom *geom)
 		return err;
 	}
 
-	if (memcmp(&monitor->geom.current, geom, sizeof(monitor->geom.current)) == 0) {
+	if (memcmp(&monitor->geom, geom, sizeof(monitor->geom)) == 0) {
 		return -EALREADY;
 	}
 
@@ -377,25 +368,27 @@ int monitor_set_geometry(const monitor_t monitor_id, struct geom *geom)
 	        monitor->crtc, geom->w, geom->h, geom->x, geom->y);
 #endif /* MWM_DEBUG */
 
-	memcpy(&monitor->geom.next, geom, sizeof(*geom));
-	monitor->geom.changed = 1;
+	memcpy(&monitor->geom, geom, sizeof(*geom));
+	monitor->needs_redraw = 1;
 
 	return 0;
 }
 
 static int monitor_swap_workspace(struct monitor *first, struct monitor *second)
 {
-	first->workspace.next = second->workspace.current;
-	first->workspace.changed = 1;
+	workspace_t swap;
 
-	second->workspace.next = first->workspace.current;
-	second->workspace.changed = 1;
+	swap = first->workspace;
+	first->workspace = second->workspace;
+	second->workspace = swap;
+	first->needs_redraw = 1;
+	second->needs_redraw = 1;
 
-	workspace_set_viewer(first->workspace.current, first->id);
-	workspace_set_viewer(second->workspace.current, second->id);
+	workspace_set_viewer(first->workspace, first->id);
+	workspace_set_viewer(second->workspace, second->id);
 
-	workspace_needs_redraw(first->workspace.current);
-	workspace_needs_redraw(second->workspace.current);
+	workspace_needs_redraw(first->workspace);
+	workspace_needs_redraw(second->workspace);
 
 	return 0;
 }
@@ -439,8 +432,8 @@ int monitor_set_workspace(const monitor_t monitor_id, const workspace_t workspac
 
 	workspace_set_viewer(workspace, monitor_id);
 
-	monitor->workspace.next = workspace;
-	monitor->workspace.changed = 1;
+	monitor->workspace = workspace;
+	monitor->needs_redraw = 1;
 	monitor_needs_redraw(monitor_id);
 	workspace_needs_redraw(workspace);
 
@@ -460,7 +453,7 @@ int monitor_get_workspace(const monitor_t monitor_id, workspace_t *workspace)
 		return err;
 	}
 
-	*workspace = monitor->workspace.current;
+	*workspace = monitor->workspace;
 	return 0;
 }
 
@@ -501,7 +494,7 @@ int monitor_arrange_clients(const monitor_t monitor_id)
 	}
 
 	layout_arrange(monitor->layout,
-	               monitor->workspace.current,
+	               monitor->workspace,
 	               &geom);
 
 	return 0;
@@ -521,10 +514,10 @@ int monitor_get_usable_area(const monitor_t monitor_id, struct geom *usable_area
 		return err;
 	}
 
-	usable_area->x = monitor->geom.current.x;
-	usable_area->y = monitor->geom.current.y + STATUSBAR_HEIGHT;
-	usable_area->w = monitor->geom.current.w;
-	usable_area->h = monitor->geom.current.h - STATUSBAR_HEIGHT;
+	usable_area->x = monitor->geom.x;
+	usable_area->y = monitor->geom.y + STATUSBAR_HEIGHT;
+	usable_area->w = monitor->geom.w;
+	usable_area->h = monitor->geom.h - STATUSBAR_HEIGHT;
 
 	orientation = layout_get_orientation(monitor->layout);
 
@@ -552,7 +545,7 @@ static int monitor_draw_clients(struct monitor *monitor)
 		return -EINVAL;
 	}
 
-	return workspace_foreach_client(monitor->workspace.current, _draw_client, monitor);
+	return workspace_foreach_client(monitor->workspace, _draw_client, monitor);
 }
 
 int monitor_needs_redraw(const monitor_t monitor_id)
@@ -669,8 +662,8 @@ static int _redraw_statusbar(struct monitor *monitor)
 
 	/* right-align the status */
 	status_width = mwm_get_text_width(status ? status :  "", MWM_FONT_STATUSBAR) + dwdata.text_padding * 2;
-	status_x = monitor->geom.current.w - status_width;
-	status_width_max = monitor->geom.current.w - workspace_button_width;
+	status_x = monitor->geom.w - status_width;
+	status_width_max = monitor->geom.w - workspace_button_width;
 
 	/*
 	 * If there isn't enough space, left-align. I'd prefer part of the status to be cut
@@ -678,7 +671,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	 */
 	if (status_x < workspace_button_width) {
 		status_x = workspace_button_width;
-		status_width = monitor->geom.current.w - status_x;
+		status_width = monitor->geom.w - status_x;
 	} else if (status_x > workspace_button_width) {
 		XSetForeground(display, monitor->gfx_context,
 		               mwm_get_color(dwdata.palette, MWM_COLOR_FOCUSED));
@@ -698,7 +691,7 @@ static int _redraw_statusbar(struct monitor *monitor)
 	                dwdata.text_padding, status_width_max, STATUSBAR_HEIGHT);
 
 	XCopyArea(display, monitor->draw_buffer, monitor->statusbar, monitor->gfx_context,
-	          0, 0, monitor->geom.current.w, STATUSBAR_HEIGHT, 0, 0);
+	          0, 0, monitor->geom.w, STATUSBAR_HEIGHT, 0, 0);
 	free(status);
 
 	return 0;
@@ -713,25 +706,16 @@ int monitor_redraw(const monitor_t monitor_id)
 		return err;
 	}
 
-	if (monitor->workspace.changed) {
-		monitor->workspace.current = monitor->workspace.next;
-	}
-
-	if (monitor->geom.changed) {
-		memcpy(&monitor->geom.current, &monitor->geom.next, sizeof(monitor->geom.current));
-		memset(&monitor->geom.next, 0, sizeof(monitor->geom.next));
-
+	if (monitor->needs_redraw) {
 		XMoveResizeWindow(mwm_get_display(), monitor->statusbar,
-		                  monitor->geom.current.x, monitor->geom.current.y,
-		                  monitor->geom.current.w, STATUSBAR_HEIGHT);
+		                  monitor->geom.x, monitor->geom.y,
+		                  monitor->geom.w, STATUSBAR_HEIGHT);
 		mwm_free_pixmap(monitor->draw_buffer);
-		monitor->draw_buffer = mwm_create_pixmap(0, monitor->geom.current.w, STATUSBAR_HEIGHT);
+		monitor->draw_buffer = mwm_create_pixmap(0, monitor->geom.w, STATUSBAR_HEIGHT);
 		XftDrawChange(monitor->xft_context, monitor->draw_buffer);
 
 		_indicator_update_geometry(monitor);
-	}
 
-	if(monitor->needs_redraw) {
 		monitor_arrange_clients(monitor_id);
 		monitor_draw_clients(monitor);
 	}
@@ -739,8 +723,6 @@ int monitor_redraw(const monitor_t monitor_id)
 	_redraw_statusbar(monitor);
 	monitor_redraw_indicators(monitor);
 
-	monitor->workspace.changed = 0;
-	monitor->geom.changed = 0;
 	monitor->needs_redraw = 0;
 
 	return 0;
@@ -789,7 +771,7 @@ static int _cmp_monitor_crtc(struct monitor *monitor, xrandr_crtc_t *crtc)
 
 static int _monitor_contains_geom(struct monitor *monitor, struct geom *geom)
 {
-	return geom_contains(&monitor->geom.current, geom) ? 0 : 1;
+	return geom_contains(&monitor->geom, geom) ? 0 : 1;
 }
 
 monitor_t monitor_of_window(const Window window)
@@ -860,14 +842,12 @@ int monitor_dump(const monitor_t monitor_id)
 	fprintf(stderr,
 	        "  Monitor %ld @ %p\n"
 	        "    CRTC:             0x%lx\n"
-	        "    Current geometry: %dx%d @ %dx%d\n"
-	        "    Next geometry:    %dx%d @ %dx%d\n"
-	        "    Geometry changed: %d\n",
+	        "    Geometry:         %dx%d @ %dx%d\n"
+	        "    Needs redraw:     %d\n",
 	        monitor_id, (void*)monitor,
 	        monitor->crtc,
-	        monitor->geom.current.w, monitor->geom.current.h, monitor->geom.current.x, monitor->geom.current.y,
-	        monitor->geom.next.w, monitor->geom.next.h, monitor->geom.next.x, monitor->geom.next.y,
-	        monitor->geom.changed);
+	        monitor->geom.w, monitor->geom.h, monitor->geom.x, monitor->geom.y,
+	        monitor->needs_redraw);
 	return 0;
 }
 #endif /* MWM_DEBUG */

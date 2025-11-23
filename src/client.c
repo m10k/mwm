@@ -16,12 +16,7 @@ struct client {
 	client_t id;
 	Window window;
 
-	struct {
-		struct geom current;
-		struct geom next;
-		int changed;
-	} geom;
-
+	struct geom geom;
 	struct geom pointer;
 	int needs_redraw;
 
@@ -114,12 +109,11 @@ int client_set_geometry(const client_t client_id, struct geom *geom)
 		return err;
 	}
 
-	if (memcmp(&client->geom.current, geom, sizeof(*geom)) == 0) {
+	if (memcmp(&client->geom, geom, sizeof(*geom)) == 0) {
 		return -EALREADY;
 	}
 
-	memcpy(&client->geom.next, geom, sizeof(*geom));
-	client->geom.changed = 1;
+	memcpy(&client->geom, geom, sizeof(*geom));
 
 	if (client_is_visible(client_id)) {
 		client_needs_redraw(client_id);
@@ -141,7 +135,7 @@ int client_get_geometry(const client_t client_id, struct geom *geom)
 		return err;
 	}
 
-	memcpy(geom, &client->geom.current, sizeof(*geom));
+	memcpy(geom, &client->geom, sizeof(*geom));
 	return 0;
 }
 
@@ -171,11 +165,6 @@ int client_redraw(const client_t client_id)
 		return err;
 	}
 
-	if (client->geom.changed) {
-		memcpy(&client->geom.current, &client->geom.next, sizeof(client->geom.next));
-		memset(&client->geom.next, 0, sizeof(client->geom.next));
-	}
-
 	/*
 	 * If the client should be visible, map it to the display and move/resize
 	 * it as needed. Otherwise, move them outside of the visible area.
@@ -183,14 +172,13 @@ int client_redraw(const client_t client_id)
 	if (client_is_visible(client_id)) {
 		XMapRaised(mwm_get_display(), client->window);
 		XMoveResizeWindow(mwm_get_display(), client->window,
-		                  client->geom.current.x, client->geom.current.y,
-		                  client->geom.current.w, client->geom.current.h);
+		                  client->geom.x, client->geom.y,
+		                  client->geom.w, client->geom.h);
 	} else {
 		XMoveWindow(mwm_get_display(), client->window,
-		            client->geom.current.w * -2, client->geom.current.y);
+		            client->geom.w * -2, client->geom.y);
 	}
 
-	client->geom.changed = 0;
 	client->needs_redraw = 0;
 
 	return 0;
@@ -282,10 +270,10 @@ int client_focus(const client_t client_id)
 	 * the pointer would suddenly jump to the center of the window when the
 	 * user is moving the pointer over the border.
 	 */
-	extents.x = client->geom.current.x - 1;
-	extents.y = client->geom.current.y - 1;
-	extents.w = client->geom.current.w + 1;
-	extents.h = client->geom.current.h + 1;
+	extents.x = client->geom.x - 1;
+	extents.y = client->geom.y - 1;
+	extents.w = client->geom.w + 1;
+	extents.h = client->geom.h + 1;
 
 	if (!geom_contains(&extents, &pointer)) {
 		client_restore_pointer(client_id);
@@ -307,10 +295,10 @@ int client_save_pointer(const client_t client_id)
 		return err;
 	}
 
-	client->pointer.x -= client->geom.current.x;
-	client->pointer.y -= client->geom.current.y;
-	client->pointer.w = client->geom.current.w;
-	client->pointer.h = client->geom.current.h;
+	client->pointer.x -= client->geom.x;
+	client->pointer.y -= client->geom.y;
+	client->pointer.w = client->geom.w;
+	client->pointer.h = client->geom.h;
 
 #ifdef MWM_DEBUG
 	fprintf(stderr, "Saved pointer: (%d, %d), %dx%d\n",
@@ -328,8 +316,8 @@ static void _client_scale_pointer(struct client *client)
 	double new_x;
 	double new_y;
 
-	w_scale = (double)client->geom.current.w / (double)client->pointer.w;
-	h_scale = (double)client->geom.current.h / (double)client->pointer.h;
+	w_scale = (double)client->geom.w / (double)client->pointer.w;
+	h_scale = (double)client->geom.h / (double)client->pointer.h;
 
 	new_x = (double)client->pointer.x * w_scale;
 	new_y = (double)client->pointer.y * h_scale;
@@ -342,8 +330,8 @@ static void _client_scale_pointer(struct client *client)
 
 	client->pointer.x = (int)new_x;
 	client->pointer.y = (int)new_y;
-	client->pointer.w = client->geom.current.w;
-	client->pointer.h = client->geom.current.h;
+	client->pointer.w = client->geom.w;
+	client->pointer.h = client->geom.h;
 
 	return;
 }
@@ -370,8 +358,8 @@ int client_restore_pointer(const client_t client_id)
 		kbptr_move(client_id, KBPTR_CENTER);
 	} else {
 		/* scale the pointer position if the client was resized */
-		if (client->geom.current.w != client->pointer.w ||
-		    client->geom.current.h != client->pointer.h) {
+		if (client->geom.w != client->pointer.w ||
+		    client->geom.h != client->pointer.h) {
 			_client_scale_pointer(client);
 		}
 
@@ -507,7 +495,7 @@ static int _cmp_client_window(struct client *client, Window *window)
 
 static int _client_contains_geom(struct client *client, struct geom *geom)
 {
-	return geom_contains(&client->geom.current, geom) ? 0 : 1;
+	return geom_contains(&client->geom, geom) ? 0 : 1;
 }
 
 client_t client_of_window(const Window window)
@@ -565,19 +553,15 @@ int client_dump(const client_t client_id)
 
 	fprintf(stderr,
 	        "    Client %ld @ %p\n"
-	        "      Window %lx\n"
-	        "      Current geometry: %dx%d @ %dx%d\n"
-	        "      Next geometry:    %dx%d @ %dx%d\n"
-	        "      Geometry changed: %d\n"
+	        "      Window            %lx\n"
+	        "      Geometry:         %dx%d @ %dx%d\n"
 	        "      Pointer:          %dx%d [w/h %dx%d]\n"
 	        "      Needs redraw:     %d\n"
 	        "      Workspace:        %ld\n"
 	        "      Hint:             %s\n",
 	        client_id, (void*)client,
 	        client->window,
-	        client->geom.current.w, client->geom.current.h, client->geom.current.x, client->geom.current.y,
-	        client->geom.next.w, client->geom.next.h, client->geom.next.x, client->geom.next.y,
-	        client->geom.changed,
+	        client->geom.w, client->geom.h, client->geom.x, client->geom.y,
 	        client->pointer.x, client->pointer.y, client->pointer.w, client->pointer.h,
 	        client->needs_redraw,
 	        client->workspace,

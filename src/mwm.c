@@ -29,7 +29,6 @@
 #include "kbptr.h"
 #include "xrandr.h"
 
-typedef void (_mwm_xhandler_t)(XEvent*);
 typedef int (event_conv_t)(XEvent*, struct event*);
 typedef int (event_handler_t)(struct event*);
 
@@ -54,17 +53,10 @@ struct mwm {
 	int running;
 	int needs_redraw;
 
-	struct {
-		monitor_t current;
-		monitor_t next;
-		int changed;
-	} focus;
-
+	monitor_t focus;
 	client_t focused_client;
 
 	struct xrandr *xrandr;
-
-	_mwm_xhandler_t *xhandler[LASTEvent];
 
 	struct {
 		PangoLayout *layout;
@@ -490,19 +482,6 @@ static int mwm_new(struct mwm **dst)
 		}
 	}
 
-	mwm->xhandler[ConfigureRequest] = (_mwm_xhandler_t*)_xev_configure_request;
-	mwm->xhandler[ConfigureNotify]  = (_mwm_xhandler_t*)_xev_configure_notify;
-	mwm->xhandler[DestroyNotify]    = (_mwm_xhandler_t*)_xev_destroy_notify;
-	mwm->xhandler[EnterNotify]      = (_mwm_xhandler_t*)_xev_enter_notify;
-	mwm->xhandler[Expose]           = (_mwm_xhandler_t*)_xev_expose;
-	mwm->xhandler[FocusIn]          = (_mwm_xhandler_t*)_xev_focus_in;
-	mwm->xhandler[KeyPress]         = (_mwm_xhandler_t*)_xev_key_press;
-	mwm->xhandler[MappingNotify]    = (_mwm_xhandler_t*)_xev_mapping_notify;
-	mwm->xhandler[MapRequest]       = (_mwm_xhandler_t*)_xev_map_request;
-	mwm->xhandler[MotionNotify]     = (_mwm_xhandler_t*)_xev_motion_notify;
-	mwm->xhandler[PropertyNotify]   = (_mwm_xhandler_t*)_xev_property_notify;
-	mwm->xhandler[UnmapNotify]      = (_mwm_xhandler_t*)_xev_unmap_notify;
-
 cleanup:
 	if(err < 0) {
 		mwm_free(&mwm);
@@ -603,9 +582,7 @@ static void _handle_signal(int sig)
 	        "    Root geometry:  %dx%d @ %dx%d\n"
 	        "    Running:        %d\n"
 	        "    Needs redraw:   %d\n"
-	        "    Current focus:  %ld\n"
-	        "    Next focus:     %ld\n"
-	        "    Focus changed:  %d\n"
+	        "    Focus:          %ld\n"
 	        "    Focused client: %ld\n",
 	        (void*)_mwm,
 	        _mwm->screen,
@@ -613,9 +590,7 @@ static void _handle_signal(int sig)
 	        _mwm->root_geom.w, _mwm->root_geom.h, _mwm->root_geom.x, _mwm->root_geom.y,
 	        _mwm->running,
 	        _mwm->needs_redraw,
-	        _mwm->focus.current,
-	        _mwm->focus.next,
-	        _mwm->focus.changed,
+	        _mwm->focus,
 	        _mwm->focused_client);
 
 	fprintf(stderr, "----- BEGIN monitors -----\n");
@@ -1378,7 +1353,7 @@ static int _event_enter_notify_handler(struct event *event)
 
 static int _event_expose_handler(struct event *event)
 {
-	if (event->data.expose.count == 0 &&
+	if (event->data.expose.count <= 0 &&
 	    event->data.expose.monitor >= 0) {
 		monitor_needs_redraw(event->data.expose.monitor);
 	}
@@ -1629,8 +1604,6 @@ int mwm_run(void)
 		} while (XEventsQueued(_mwm->display, QueuedAfterFlush) > 0);
 
 		while (event_dq(&mwm_event) >= 0) {
-			fprintf(stderr, "Handling event %d\n", mwm_event->type);
-
 			if (mwm_event->type < (sizeof(_event_handlers) / sizeof(_event_handlers[0]))) {
 				_event_handlers[mwm_event->type](mwm_event);
 			} else {
@@ -1733,8 +1706,7 @@ int mwm_focus_monitor(const monitor_t monitor)
 	fprintf(stderr, "New monitor will be: %ld\n", monitor);
 #endif /* MWM_DEBUG */
 
-	_mwm->focus.next = monitor;
-	_mwm->focus.changed = 1;
+	_mwm->focus = monitor;
 
 	mwm_needs_redraw();
 
@@ -1743,7 +1715,7 @@ int mwm_focus_monitor(const monitor_t monitor)
 
 monitor_t mwm_get_focused_monitor(void)
 {
-	return _mwm->focus.current;
+	return _mwm->focus;
 }
 
 int mwm_attach_client(const client_t client)
@@ -1861,21 +1833,14 @@ int mwm_needs_redraw(void)
 
 int mwm_redraw(void)
 {
-	if (_mwm->focus.changed) {
-		monitor_needs_redraw(_mwm->focus.current);
-		monitor_needs_redraw(_mwm->focus.next);
-
-		_mwm->focus.current = _mwm->focus.next;
-		_mwm->focus.next = -1;
-	}
-
 	if(_mwm->needs_redraw) {
+		monitor_needs_redraw(_mwm->focus);
+
 		monitor_foreach((int(*)(const monitor_t, void*))monitor_redraw, NULL);
 		workspace_foreach((int(*)(const workspace_t, void*))workspace_redraw, NULL);
-	}
 
-	_mwm->needs_redraw = 0;
-	_mwm->focus.changed = 0;
+		_mwm->needs_redraw = 0;
+	}
 
 	return 0;
 }

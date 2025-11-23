@@ -15,18 +15,8 @@ struct workspace {
 	client_t *clients;
 	int num_clients;
 
-	struct {
-	        int current;
-	        int next;
-		int changed;
-	} focus;
-
-	struct {
-	        monitor_t current;
-	        monitor_t next;
-		int changed;
-	} viewer;
-
+	int focus;
+	monitor_t viewer;
 	int number;
 	int needs_redraw;
 	workspace_t id;
@@ -88,10 +78,8 @@ workspace_t workspace_new(const int number)
 		return -ENOMEM;
 	}
 
-	wspace->focus.current = -1;
-	wspace->focus.next = -1;
-	wspace->viewer.current = -1;
-	wspace->viewer.next = -1;
+	wspace->focus = -1;
+	wspace->viewer = -1;
 	wspace->number = number;
 
 	if ((err = set_nq(_workspaces, wspace)) < 0) {
@@ -239,16 +227,9 @@ static int _client_array_remove(struct workspace *workspace, const client_t clie
 #define IS_CASE3(focused_idx, removed_idx, array_size) (focused_idx == removed_idx && \
                                                         IS_LAST(removed_idx, array_size))
 
-	if (IS_CASE1(workspace->focus.current, rem_idx) ||
-	    IS_CASE3(workspace->focus.current, rem_idx, workspace->num_clients)) {
-		workspace->focus.current--;
-	}
-	if (IS_CASE1(workspace->focus.next, rem_idx)) {
-		workspace->focus.next--;
-	} else if (workspace->focus.next == rem_idx) {
-		/* if the to-be-focused client was removed, don't change the focus */
-		workspace->focus.next = -1;
-		workspace->focus.changed = 0;
+	if (IS_CASE1(workspace->focus, rem_idx) ||
+	    IS_CASE3(workspace->focus, rem_idx, workspace->num_clients)) {
+		workspace->focus--;
 	}
 
 	free(workspace->clients);
@@ -356,12 +337,12 @@ int workspace_set_viewer(const workspace_t workspace_id, const monitor_t viewer)
 		return err;
 	}
 
-	if (workspace->viewer.current == viewer) {
+	if (workspace->viewer == viewer) {
 		return -EALREADY;
 	}
 
-	workspace->viewer.next = viewer;
-	workspace->viewer.changed = 1;
+	workspace->viewer = viewer;
+	workspace_needs_redraw(workspace_id);
 
 	return 0;
 }
@@ -379,7 +360,7 @@ int workspace_get_viewer(const workspace_t workspace_id, monitor_t *viewer)
 		return err;
 	}
 
-	*viewer = workspace->viewer.current;
+	*viewer = workspace->viewer;
 
 	return 0;
 }
@@ -398,18 +379,11 @@ int workspace_focus_client(const workspace_t workspace_id, const client_t client
 		return err;
 	}
 
-	if (workspace->focus.current == client_idx) {
-		/* we're staying on the current workspace */
-		if (workspace->focus.next != workspace->focus.current) {
-			workspace->focus.next = -1;
-			workspace->focus.changed = 0;
-		}
-
+	if (workspace->focus == client_idx) {
 		return -EALREADY;
 	}
 
-	workspace->focus.next = client_idx;
-	workspace->focus.changed = 1;
+	workspace->focus = client_idx;
 	workspace_needs_redraw(workspace_id);
 
 	return 0;
@@ -428,15 +402,15 @@ int workspace_get_focused_client(const workspace_t workspace_id, client_t *clien
 		return err;
 	}
 
-	if (workspace->focus.current < 0) {
+	if (workspace->focus < 0) {
 		return -ENOENT;
 	}
 
-	if (workspace->focus.current >= workspace->num_clients) {
+	if (workspace->focus >= workspace->num_clients) {
 		return -EBADFD;
 	}
 
-	*client = workspace->clients[workspace->focus.current];
+	*client = workspace->clients[workspace->focus];
 	return 0;
 }
 
@@ -480,14 +454,7 @@ int workspace_redraw(const workspace_t workspace_id)
 		return err;
 	}
 
-	if (workspace->viewer.changed) {
-		workspace->viewer.current = workspace->viewer.next;
-	}
-	if (workspace->focus.changed) {
-		workspace->focus.current = workspace->focus.next;
-	}
-
-	if(workspace->needs_redraw) {
+	if (workspace->needs_redraw) {
 		int i;
 
 		for (i = 0; i < workspace->num_clients; i++) {
@@ -495,8 +462,6 @@ int workspace_redraw(const workspace_t workspace_id)
 		}
 	}
 
-	workspace->viewer.changed = 0;
-	workspace->focus.changed = 0;
 	workspace->needs_redraw = 0;
 
 	return 0;
@@ -512,11 +477,7 @@ int workspace_needs_redraw(const workspace_t workspace_id)
 	}
 
 	workspace->needs_redraw = 1;
-
-	monitor_needs_redraw(workspace->viewer.current);
-	if (workspace->viewer.changed) {
-		monitor_needs_redraw(workspace->viewer.next);
-	}
+	monitor_needs_redraw(workspace->viewer);
 
 	return 0;
 }
@@ -548,7 +509,7 @@ int workspace_shift_focus(const workspace_t workspace_id, int dir)
 		return -EBADFD;
 	}
 
-	old_focus = workspace->focus.current;
+	old_focus = workspace->focus;
 	new_focus = (old_focus + dir) % workspace->num_clients;
 	while (new_focus < 0) {
 		new_focus += workspace->num_clients;
@@ -586,7 +547,7 @@ int workspace_shift_client(const workspace_t workspace_id, const client_t client
 	if (client >= 0) {
 		shift_src = _get_client_idx(workspace, client);
 	} else {
-		shift_src = workspace->focus.current;
+		shift_src = workspace->focus;
 	}
 	fprintf(stderr, "%s: Shifting client #%d (id %ld)\n", __func__, shift_src, workspace->clients[shift_src]);
 
@@ -604,17 +565,14 @@ int workspace_shift_client(const workspace_t workspace_id, const client_t client
 	swap = workspace->clients[shift_dst];
 	workspace->clients[shift_dst] = workspace->clients[shift_src];
 	workspace->clients[shift_src] = swap;
-	if (shift_src == workspace->focus.current) {
-		workspace->focus.current = shift_dst;
-		fprintf(stderr, "%s: Updating workspace->focus.current to %d\n", __func__, shift_dst);
+	if (shift_src == workspace->focus) {
+		workspace->focus = shift_dst;
+		fprintf(stderr, "%s: Updating workspace->focus to %d\n", __func__, shift_dst);
 	}
 	workspace_needs_redraw(workspace_id);
 
-	fprintf(stderr, "%s: workspace->focus\n"
-	        "  .current = %d\n"
-	        "  .next    = %d\n"
-	        "  .changed = %d\n",
-	        __func__, workspace->focus.current, workspace->focus.next, workspace->focus.changed);
+	fprintf(stderr, "%s: workspace->focus = %d\n",
+	        __func__, workspace->focus);
 
 	return 0;
 }
@@ -650,7 +608,7 @@ static int _cmp_workspace_number(const struct workspace *workspace, const int *n
 
 static int _cmp_workspace_viewer(const struct workspace *workspace, monitor_t *viewer)
 {
-	return workspace->viewer.current - *viewer;
+	return workspace->viewer - *viewer;
 }
 
 workspace_t workspace_number(const int number)
@@ -673,26 +631,31 @@ int workspace_dump(const workspace_t workspace_id)
 	struct workspace *workspace;
 	int err;
 	int i;
+	client_t focused_client;
 
 	if ((err = __get_workspace(&workspace, workspace_id)) < 0) {
 		fprintf(stderr, "  Workspace %ld INVALID: %s\n", workspace_id, strerror(-err));
 		return err;
 	}
 
+	if (workspace->clients && workspace->focus >= 0 && workspace->focus < workspace->num_clients) {
+		focused_client = workspace->clients[workspace->focus];
+	} else {
+		focused_client = -1;
+	}
+
 	fprintf(stderr,
 	        "  Workspace %ld @ %p\n"
 	        "    Number:          %d\n"
-	        "    Current focus:   %d [client %ld]\n"
-	        "    Next focus:      %d [client %ld]\n"
-	        "    Current viewer:  %ld\n"
-	        "    Next viewer:     %ld\n"
+	        "    Clients:         %d [%p]\n"
+	        "    Focus:           %d [client %ld]\n"
+	        "    Viewer:          %ld\n"
 	        "    Needs redraw:    %d\n",
 	        workspace_id, (void*)workspace,
 	        workspace->number,
-	        workspace->focus.current, workspace->clients[workspace->focus.current],
-	        workspace->focus.next, workspace->clients[workspace->focus.next],
-	        workspace->viewer.current,
-	        workspace->viewer.next,
+	        workspace->num_clients, (void*)workspace->clients,
+	        workspace->focus, focused_client,
+	        workspace->viewer,
 	        workspace->needs_redraw);
 
 	for (i = 0; i < workspace->num_clients; i++) {
