@@ -28,6 +28,7 @@ struct indicator {
 	GC gfx_context;
 	XftDraw *xft_context;
 	int orientation;
+	int visible;
 };
 
 struct monitor {
@@ -101,15 +102,23 @@ static void _indicator_update_window(struct indicator *indicator, struct monitor
 static void _indicator_update_geometry(struct monitor *monitor)
 {
 	monitor->indicator[HINDICATOR].orientation = HINDICATOR;
-	monitor->indicator[HINDICATOR].geom.x = monitor->geom.x;
+	if (monitor->indicator[HINDICATOR].visible) {
+		monitor->indicator[HINDICATOR].geom.x = monitor->geom.x;
+	} else {
+		monitor->indicator[HINDICATOR].geom.x = -2 * monitor->geom.w;
+	}
 	monitor->indicator[HINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
 	monitor->indicator[HINDICATOR].geom.w = monitor->geom.w;
 	monitor->indicator[HINDICATOR].geom.h = INDICATOR_HEIGHT;
 	_indicator_update_window(&monitor->indicator[HINDICATOR], monitor);
 
 	monitor->indicator[VINDICATOR].orientation = VINDICATOR;
-	monitor->indicator[VINDICATOR].geom.x = monitor->geom.x + monitor->geom.w -
-		INDICATOR_HEIGHT;
+	if (monitor->indicator[VINDICATOR].visible) {
+		monitor->indicator[VINDICATOR].geom.x = monitor->geom.x + monitor->geom.w -
+			INDICATOR_HEIGHT;
+	} else {
+		monitor->indicator[VINDICATOR].geom.x = -2 * INDICATOR_HEIGHT;
+	}
 	monitor->indicator[VINDICATOR].geom.y = monitor->geom.y + STATUSBAR_HEIGHT;
 	monitor->indicator[VINDICATOR].geom.w = INDICATOR_HEIGHT;
 	monitor->indicator[VINDICATOR].geom.h = monitor->geom.h - STATUSBAR_HEIGHT;
@@ -123,6 +132,7 @@ void _indicator_set_visible(struct indicator *indicator, int visible, struct mon
 	Display *display;
 
 	display = mwm_get_display();
+	indicator->visible = visible;
 
 	if(visible) {
 		XMoveWindow(display, indicator->window, indicator->geom.x, indicator->geom.y);
