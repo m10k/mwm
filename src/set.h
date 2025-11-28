@@ -6,6 +6,8 @@ struct set;
 int set_new(struct set **set);
 int set_free(struct set **set);
 
+int set_real_index(struct set *set, const int index);
+
 /* array operations */
 int set_set(struct set *set, const int idx, void *data);
 int set_unset(struct set *set, const int idx, void **data);

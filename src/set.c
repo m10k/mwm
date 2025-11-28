@@ -143,6 +143,11 @@ static int _normalize_idx(struct set *set, const int idx)
 	return normalized;
 }
 
+int set_real_index(struct set *set, const int index)
+{
+	return _normalize_idx(set, index);
+}
+
 int set_set(struct set *set, const int idx, void *data)
 {
 	if (!set) {
