@@ -63,6 +63,11 @@ static inline int __init(void)
 	return _monitors ? 0 : set_new(&_monitors);
 }
 
+monitor_t monitor_normalize_id(const monitor_t monitor_id)
+{
+	return set_real_index(_monitors, monitor_id);
+}
+
 static inline int __get_monitor(struct monitor **monitor, const monitor_t monitor_id)
 {
 	int err;

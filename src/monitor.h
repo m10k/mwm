@@ -10,6 +10,8 @@ struct layout;
 monitor_t monitor_new(const xrandr_crtc_t crtc, const struct geom geom);
 int monitor_free(const monitor_t monitor_id);
 
+monitor_t monitor_normalize_id(const monitor_t monitor_id);
+
 Display* monitor_get_display(const monitor_t monitor_id);
 int monitor_set_layout(const monitor_t monitor_id, struct layout *layout);
 int monitor_get_layout(const monitor_t monitor_id, struct layout **layout);
