@@ -171,7 +171,7 @@ int client_redraw(const client_t client_id)
 	 * it as needed. Otherwise, move them outside of the visible area.
 	 */
 	if (client_is_visible(client_id)) {
-		XMapRaised(mwm_get_display(), client->window);
+		XMapWindow(mwm_get_display(), client->window);
 		XMoveResizeWindow(mwm_get_display(), client->window,
 		                  client->geom.x, client->geom.y,
 		                  client->geom.w, client->geom.h);
