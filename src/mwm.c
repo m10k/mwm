@@ -748,15 +748,18 @@ static void _cmd_shift_monitor_focus(void *arg)
 	}
 
 	src_monitor = mwm_get_focused_monitor();
-	dst_monitor = src_monitor + dir;
+	dst_monitor = monitor_normalize_id(src_monitor + dir);
 
-	if (monitor_get_focused_client(src_monitor, &src_client) && src_client >= 0) {
-		client_save_pointer(src_client);
+	if (src_monitor != dst_monitor) {
+		if (monitor_get_focused_client(src_monitor, &src_client) && src_client >= 0) {
+			client_save_pointer(src_client);
+		}
+
+		mwm_focus_monitor(dst_monitor);
+		monitor_needs_redraw(src_monitor);
+		monitor_needs_redraw(dst_monitor);
 	}
 
-	mwm_focus_monitor(dst_monitor);
-	monitor_needs_redraw(src_monitor);
-	monitor_needs_redraw(dst_monitor);
 	return;
 }
 
@@ -776,11 +779,13 @@ static void _cmd_shift_workspace(void *arg)
 	if (src_monitor < 0) {
 		return;
 	}
-	dst_monitor = src_monitor + dir;
+	dst_monitor = monitor_normalize_id(src_monitor + dir);
 
-	monitor_get_workspace(src_monitor, &workspace);
-	monitor_set_workspace(dst_monitor, workspace);
-	mwm_focus_monitor(dst_monitor);
+	if (src_monitor != dst_monitor) {
+		monitor_get_workspace(src_monitor, &workspace);
+		monitor_set_workspace(dst_monitor, workspace);
+		mwm_focus_monitor(dst_monitor);
+	}
 
 	return;
 }
